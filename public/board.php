@@ -565,13 +565,6 @@ foreach ($boardMembers as $member) {
                                     <a 
                                         href="#" 
                                         class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                        onclick="event.preventDefault(); document.getElementById('list-menu-<?php echo $list['id']; ?>').classList.add('hidden'); showAddListModal();"
-                                    >
-                                        <i class="fas fa-plus mr-2"></i> Add list
-                                    </a>
-                                    <a 
-                                        href="#" 
-                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                                         onclick="event.preventDefault(); document.getElementById('list-menu-<?php echo $list['id']; ?>').classList.add('hidden'); showAddCardModal(<?php echo $list['id']; ?>);"
                                     >
                                         <i class="fas fa-tasks mr-2"></i> Add task
