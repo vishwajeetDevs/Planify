@@ -75,44 +75,21 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Lets database triggers record who made a change for live sync.
+if (isset($conn) && isset($_SESSION['user_id'])) {
+    $realtimeActorId = (int) $_SESSION['user_id'];
+    $conn->query("SET @planify_user_id = {$realtimeActorId}");
+}
+
 // =============================================================================
-// ENVIRONMENT CONFIGURATION
+// PUBLIC URLS (from .env)
 // =============================================================================
-// Determine environment based on APP_ENV or auto-detect from hostname
-$appEnv = env('APP_ENV', 'production');
-$httpHost = $_SERVER['HTTP_HOST'] ?? '';
-$isLocalhost = in_array($httpHost, ['localhost', '127.0.0.1']) 
-               || strpos($httpHost, 'localhost:') === 0;
-
-// Known production domains (InfinityFree)
-$productionDomains = ['planify-task.great-site.net', 'great-site.net', 'infinityfree.com', 'epizy.com'];
-$isProduction = false;
-foreach ($productionDomains as $domain) {
-    if (strpos($httpHost, $domain) !== false) {
-        $isProduction = true;
-        break;
-    }
-}
-
-// Override to development if on localhost
-if ($isLocalhost) {
-    $appEnv = 'development';
-} elseif ($isProduction) {
-    $appEnv = 'production';
-}
-
-// Set base path and URL based on environment
-if ($appEnv === 'development' || $isLocalhost) {
-    // LOCAL DEVELOPMENT - files in /planify subfolder
-    define('BASE_PATH', env('APP_BASE_PATH', '/planify'));
-    define('BASE_URL', 'http://localhost/planify/public');
-    define('APP_URL', 'http://localhost/planify');
-} else {
-    // PRODUCTION (InfinityFree) - files at root, no subfolder
-    define('BASE_PATH', '');
-    define('BASE_URL', 'https://planify-task.great-site.net/public');
-    define('APP_URL', 'https://planify-task.great-site.net');
-}
+// APP_URL is the origin (http://192.168.2.242). APP_BASE_PATH is the folder
+// (/planify, or empty in production). Every absolute link is built from these.
+$appUrls = planify_resolve_app_urls();
+define('BASE_PATH', $appUrls['BASE_PATH']);
+define('BASE_URL', $appUrls['BASE_URL']);
+define('APP_URL', $appUrls['APP_URL']);
 
 // Application name
 if (!defined('APP_NAME')) {
@@ -121,7 +98,7 @@ if (!defined('APP_NAME')) {
 
 // Upload configuration
 define('UPLOAD_PATH', dirname(__DIR__) . '/' . env('UPLOAD_PATH', 'uploads') . '/');
-define('UPLOAD_URL', BASE_URL . '/../' . env('UPLOAD_PATH', 'uploads') . '/');
+define('UPLOAD_URL', APP_URL . '/' . trim((string) env('UPLOAD_PATH', 'uploads'), '/') . '/');
 define('UPLOAD_MAX_SIZE', env('UPLOAD_MAX_SIZE', 10485760)); // 10MB default
 
 // Security settings

@@ -185,6 +185,8 @@ $interval = $memberSince->diff($now);
                             <div class="grid grid-cols-6 sm:grid-cols-13 gap-3" id="themeColorPicker">
                                 <?php
                                 $themeColors = [
+                                    'mono' => ['bg' => '#171717', 'name' => 'Black'],
+                                    'slate' => ['bg' => '#737373', 'name' => 'Grey'],
                                     'indigo' => ['bg' => '#4F46E5', 'name' => 'Indigo'],
                                     'blue' => ['bg' => '#2563EB', 'name' => 'Blue'],
                                     'purple' => ['bg' => '#7C3AED', 'name' => 'Purple'],
@@ -197,9 +199,8 @@ $interval = $memberSince->diff($now);
                                     'emerald' => ['bg' => '#059669', 'name' => 'Emerald'],
                                     'teal' => ['bg' => '#0D9488', 'name' => 'Teal'],
                                     'cyan' => ['bg' => '#0891B2', 'name' => 'Cyan'],
-                                    'slate' => ['bg' => '#475569', 'name' => 'Slate'],
                                 ];
-                                $currentThemeColor = $user['theme_color'] ?? 'indigo';
+                                $currentThemeColor = $user['theme_color'] ?? 'mono';
                                 foreach ($themeColors as $colorKey => $colorData):
                                     $isSelected = $currentThemeColor === $colorKey;
                                 ?>
@@ -387,7 +388,7 @@ $interval = $memberSince->diff($now);
                 </button>
                 <button 
                     type="submit"
-                    class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-neutral-800 transition-colors"
                 >
                     Save Changes
                 </button>
@@ -448,7 +449,7 @@ $interval = $memberSince->diff($now);
                 </button>
                 <button 
                     type="submit"
-                    class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                    class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-neutral-800 transition-colors"
                 >
                     Update Password
                 </button>
@@ -626,6 +627,8 @@ async function setTheme(theme) {
 
 // Theme color names for display
 const themeColorNames = {
+    'mono': 'Black',
+    'slate': 'Grey',
     'indigo': 'Indigo',
     'blue': 'Blue',
     'purple': 'Purple',
@@ -637,8 +640,7 @@ const themeColorNames = {
     'green': 'Green',
     'emerald': 'Emerald',
     'teal': 'Teal',
-    'cyan': 'Cyan',
-    'slate': 'Slate'
+    'cyan': 'Cyan'
 };
 
 // Set Theme Color

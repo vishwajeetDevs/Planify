@@ -111,7 +111,7 @@ $_SESSION['user_id'] = $user['id'];
 $_SESSION['user_name'] = $user['name'];
 $_SESSION['user_email'] = $user['email'];
 $_SESSION['theme'] = $user['theme'];
-$_SESSION['theme_color'] = $user['theme_color'] ?? 'purple';
+$_SESSION['theme_color'] = $user['theme_color'] ?? 'mono';
 
 // Generate CSRF token for the new session
 $_SESSION['csrf_token'] = bin2hex(random_bytes(32));

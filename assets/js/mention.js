@@ -230,14 +230,14 @@
                 <div class="mention-avatar">
                     ${member.avatar && member.avatar !== 'default-avatar.png' 
                         ? `<img src="${window.BASE_PATH || ''}/assets/uploads/avatars/${escapeHtml(member.avatar)}" alt="" class="w-7 h-7 rounded-full object-cover">`
-                        : `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-primary to-indigo-600 flex items-center justify-center text-white text-xs font-semibold">${member.name.charAt(0).toUpperCase()}</div>`
+                        : `<div class="w-7 h-7 rounded-full bg-gradient-to-br from-neutral-700 to-neutral-900 flex items-center justify-center text-white text-xs font-semibold">${member.name.charAt(0).toUpperCase()}</div>`
                     }
                 </div>
                 <div class="mention-info flex-1 min-w-0">
                     <div class="mention-name text-sm font-medium text-gray-900 dark:text-white truncate">${escapeHtml(member.name)}</div>
                     <div class="mention-email text-xs text-gray-500 dark:text-gray-400 truncate">${escapeHtml(member.email)}</div>
                 </div>
-                <span class="mention-role text-xs px-2 py-0.5 rounded-full ${getRoleBadgeClass(member.role)}">${member.role}</span>
+                <span class="mention-role text-xs px-2 py-0.5 rounded-full ${getRoleBadgeClass(member.role)}">${getRoleLabel(member.role)}</span>
             </div>
         `).join('');
 
@@ -513,15 +513,22 @@
     /**
      * Get role badge CSS class
      */
+    function getRoleLabel(role) {
+        const labels = {
+            owner: 'Super Admin',
+            admin: 'Admin',
+            member: 'Member'
+        };
+        return labels[role] || 'Member';
+    }
+
     function getRoleBadgeClass(role) {
         const classes = {
-            'owner': 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
-            'admin': 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400',
-            'member': 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400',
-            'commenter': 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400',
-            'viewer': 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            'owner': 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900',
+            'admin': 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100',
+            'member': 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200'
         };
-        return classes[role] || classes['viewer'];
+        return classes[role] || classes['member'];
     }
 
     /**
@@ -587,7 +594,7 @@
                 u.name.toLowerCase() === name.toLowerCase()
             );
             if (user) {
-                return `<span class="mention-tag bg-primary/10 text-primary dark:bg-primary/20 dark:text-indigo-300 px-1 py-0.5 rounded font-medium" data-user-id="${user.id}">@${escapeHtml(user.name)}</span>`;
+                return `<span class="mention-tag bg-primary/10 text-primary dark:bg-primary/20 dark:text-neutral-300 px-1 py-0.5 rounded font-medium" data-user-id="${user.id}">@${escapeHtml(user.name)}</span>`;
             }
             return `<span class="mention-tag bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-1 py-0.5 rounded">@${escapeHtml(name)}</span>`;
         });

@@ -29,23 +29,43 @@
     --shadow-xl: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
     --shadow-glow: 0 0 20px rgba(var(--color-primary-rgb), 0.3);
     
-    /* Default Theme Colors (Indigo) */
-    --color-primary: #4F46E5;
-    --color-primary-light: #6366f1;
-    --color-primary-dark: #4338ca;
-    --color-primary-rgb: 79, 70, 229;
+    /* Default theme: black, white, and grey.
+       primary = button fill, on-primary = label on that fill,
+       primary-text = links, icons, and hover text on the page. */
+    --color-primary: #171717;
+    --color-primary-light: #525252;
+    --color-primary-dark: #0a0a0a;
+    --color-primary-rgb: 23, 23, 23;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #171717;
+    --surface-1: #ffffff;
+    --surface-2: #f5f5f5;
+    --surface-border: #e5e5e5;
+    --text-muted: #737373;
 }
 
 /* =====================================================
    THEME COLOR SYSTEM
    ===================================================== */
 
-/* Indigo Theme (Default) */
+/* Mono theme (default): black, white, and grey */
+[data-theme-color="mono"] {
+    --color-primary: #171717;
+    --color-primary-light: #525252;
+    --color-primary-dark: #0a0a0a;
+    --color-primary-rgb: 23, 23, 23;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #171717;
+}
+
+/* Indigo Theme */
 [data-theme-color="indigo"] {
     --color-primary: #4F46E5;
     --color-primary-light: #6366f1;
     --color-primary-dark: #4338ca;
     --color-primary-rgb: 79, 70, 229;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #4338ca;
 }
 
 /* Blue Theme */
@@ -54,6 +74,8 @@
     --color-primary-light: #3B82F6;
     --color-primary-dark: #1D4ED8;
     --color-primary-rgb: 37, 99, 235;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #1d4ed8;
 }
 
 /* Purple Theme */
@@ -62,6 +84,8 @@
     --color-primary-light: #8B5CF6;
     --color-primary-dark: #6D28D9;
     --color-primary-rgb: 124, 58, 237;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #6d28d9;
 }
 
 /* Pink Theme */
@@ -70,6 +94,8 @@
     --color-primary-light: #EC4899;
     --color-primary-dark: #BE185D;
     --color-primary-rgb: 219, 39, 119;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #be185d;
 }
 
 /* Rose Theme */
@@ -78,6 +104,8 @@
     --color-primary-light: #F43F5E;
     --color-primary-dark: #BE123C;
     --color-primary-rgb: 225, 29, 72;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #be123c;
 }
 
 /* Red Theme */
@@ -86,6 +114,8 @@
     --color-primary-light: #EF4444;
     --color-primary-dark: #B91C1C;
     --color-primary-rgb: 220, 38, 38;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #b91c1c;
 }
 
 /* Orange Theme */
@@ -94,6 +124,8 @@
     --color-primary-light: #F97316;
     --color-primary-dark: #C2410C;
     --color-primary-rgb: 234, 88, 12;
+    --color-on-primary: #431407;
+    --color-primary-text: #c2410c;
 }
 
 /* Amber Theme */
@@ -102,6 +134,8 @@
     --color-primary-light: #F59E0B;
     --color-primary-dark: #B45309;
     --color-primary-rgb: 217, 119, 6;
+    --color-on-primary: #451a03;
+    --color-primary-text: #b45309;
 }
 
 /* Green Theme */
@@ -110,6 +144,8 @@
     --color-primary-light: #22C55E;
     --color-primary-dark: #15803D;
     --color-primary-rgb: 22, 163, 74;
+    --color-on-primary: #052e16;
+    --color-primary-text: #166534;
 }
 
 /* Emerald Theme */
@@ -118,6 +154,8 @@
     --color-primary-light: #10B981;
     --color-primary-dark: #047857;
     --color-primary-rgb: 5, 150, 105;
+    --color-on-primary: #022c22;
+    --color-primary-text: #047857;
 }
 
 /* Teal Theme */
@@ -126,6 +164,8 @@
     --color-primary-light: #14B8A6;
     --color-primary-dark: #0F766E;
     --color-primary-rgb: 13, 148, 136;
+    --color-on-primary: #042f2e;
+    --color-primary-text: #0f766e;
 }
 
 /* Cyan Theme */
@@ -134,14 +174,113 @@
     --color-primary-light: #06B6D4;
     --color-primary-dark: #0E7490;
     --color-primary-rgb: 8, 145, 178;
+    --color-on-primary: #083344;
+    --color-primary-text: #0e7490;
 }
 
 /* Slate Theme */
 [data-theme-color="slate"] {
-    --color-primary: #475569;
-    --color-primary-light: #64748B;
-    --color-primary-dark: #334155;
-    --color-primary-rgb: 71, 85, 105;
+    --color-primary: #404040;
+    --color-primary-light: #737373;
+    --color-primary-dark: #171717;
+    --color-primary-rgb: 64, 64, 64;
+    --color-on-primary: #ffffff;
+    --color-primary-text: #262626;
+}
+
+/* On dark surfaces, accent text and icons switch to a light tint.
+   Button fills stay on --color-primary so labels can use --color-on-primary. */
+html.dark[data-theme-color="mono"] { --color-primary-text: #f5f5f5; }
+html.dark[data-theme-color="slate"] { --color-primary-text: #e5e5e5; }
+html.dark[data-theme-color="indigo"] { --color-primary-text: #c7d2fe; }
+html.dark[data-theme-color="blue"] { --color-primary-text: #bfdbfe; }
+html.dark[data-theme-color="purple"] { --color-primary-text: #ddd6fe; }
+html.dark[data-theme-color="pink"] { --color-primary-text: #fbcfe8; }
+html.dark[data-theme-color="rose"] { --color-primary-text: #fecdd3; }
+html.dark[data-theme-color="red"] { --color-primary-text: #fecaca; }
+html.dark[data-theme-color="orange"] { --color-primary-text: #fed7aa; }
+html.dark[data-theme-color="amber"] { --color-primary-text: #fde68a; }
+html.dark[data-theme-color="green"] { --color-primary-text: #bbf7d0; }
+html.dark[data-theme-color="emerald"] { --color-primary-text: #a7f3d0; }
+html.dark[data-theme-color="teal"] { --color-primary-text: #99f6e4; }
+html.dark[data-theme-color="cyan"] { --color-primary-text: #a5f3fc; }
+
+/* Accent used as text, icon, border, or ring — never the raw button fill. */
+.text-primary:not(.bg-primary):not(.bg-primary-dark),
+.hover\:text-primary:hover,
+.group:hover .group-hover\:text-primary,
+.group\/logo:hover .group-hover\/logo\:text-primary,
+.group\/search:focus-within .group-focus-within\/search\:text-primary,
+.group:focus-within .group-focus-within\:text-primary,
+.focus\:text-primary:focus {
+    color: var(--color-primary-text) !important;
+}
+
+.dark .text-primary-dark,
+.dark .hover\:text-primary-dark:hover,
+.dark .text-primary-light,
+.dark .hover\:text-primary-light:hover {
+    color: var(--color-primary-text) !important;
+}
+
+.bg-primary,
+.hover\:bg-primary:hover,
+.bg-primary-dark,
+.hover\:bg-primary-dark:hover,
+.hover\:bg-primary-light:hover,
+.dark .dark\:hover\:bg-primary-light:hover,
+.file\:bg-primary::file-selector-button {
+    color: var(--color-on-primary);
+}
+
+.border-primary,
+.hover\:border-primary:hover,
+.focus\:border-primary:focus {
+    border-color: var(--color-primary-text) !important;
+}
+
+.focus\:ring-primary:focus {
+    --tw-ring-color: var(--color-primary-text) !important;
+}
+
+/* Near-black accents disappear as translucent washes on dark cards. */
+html.dark[data-theme-color="mono"] .bg-primary\/5,
+html.dark[data-theme-color="mono"] .bg-primary\/10,
+html.dark[data-theme-color="mono"] .hover\:bg-primary\/5:hover,
+html.dark[data-theme-color="mono"] .hover\:bg-primary\/10:hover,
+html.dark[data-theme-color="slate"] .bg-primary\/5,
+html.dark[data-theme-color="slate"] .bg-primary\/10,
+html.dark[data-theme-color="slate"] .hover\:bg-primary\/5:hover,
+html.dark[data-theme-color="slate"] .hover\:bg-primary\/10:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Board tiles keep a visible frame. The accent is only the top edge, mixed lighter in dark mode. */
+.board-tile {
+    border-style: dashed;
+    border-width: 1px;
+    border-top-width: 4px;
+    border-color: #e5e5e5;
+    border-top-color: var(--board-accent, var(--color-primary));
+    background-color: rgba(255, 255, 255, 0.92);
+    color: #171717;
+}
+
+.dark .board-tile {
+    border-color: #525252;
+    border-top-color: color-mix(in srgb, var(--board-accent, #ffffff) 55%, #ffffff);
+    background-color: rgba(23, 23, 23, 0.92);
+    color: #f5f5f5;
+}
+
+.board-tile:hover {
+    border-color: var(--color-primary-text);
+    border-top-color: var(--board-accent, var(--color-primary-text));
+}
+
+.dark .board-tile:hover {
+    border-color: #d4d4d4;
+    border-top-color: color-mix(in srgb, var(--board-accent, #ffffff) 55%, #ffffff);
 }
 
 /* =====================================================
@@ -196,15 +335,15 @@ a, button, input, select, textarea,
 }
 
 .dark ::-webkit-scrollbar-thumb {
-    background: #4f46e5;
+    background: #525252;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #a5b4fc;
+    background: #a3a3a3;
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-    background: #6366f1;
+    background: #737373;
 }
 
 /* Custom scrollbar for specific containers */
@@ -541,17 +680,23 @@ button[class*="rounded-full"]:hover svg {
    11. DRAG & DROP ANIMATIONS
    ===================================================== */
 
-/* Ghost placeholder - shows where card will be dropped */
+/* Ghost placeholder — the empty slot where the task will land.
+   Do not set transform here. SortableJS moves the floating card with transform. */
 .sortable-ghost {
-    opacity: 0.3;
-    background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%) !important;
+    opacity: 1 !important;
+    background: rgba(79, 70, 229, 0.08) !important;
     border: 2px dashed var(--color-primary) !important;
-    border-radius: 0.75rem;
+    border-radius: 0.75rem !important;
     box-shadow: none !important;
+    min-height: 4.5rem;
 }
 
 .sortable-ghost > * {
-    opacity: 0;
+    opacity: 0 !important;
+}
+
+.dark .sortable-ghost {
+    background: rgba(129, 140, 248, 0.12) !important;
 }
 
 /* Card when selected/picked up */
@@ -560,38 +705,32 @@ button[class*="rounded-full"]:hover svg {
     z-index: 9999 !important;
 }
 
-/* The actual dragged card that follows cursor */
-.sortable-drag {
-    opacity: 1 !important;
-    transform: rotate(2deg) scale(1.03) !important;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35),
-                0 0 0 2px var(--color-primary),
-                0 0 30px rgba(79, 70, 229, 0.3) !important;
-    border-radius: 0.75rem;
-    z-index: 99999 !important;
-    cursor: grabbing !important;
-    transition: none !important; /* Remove transition for instant cursor following */
-}
-
-/* Fallback element - the clone that follows cursor */
+/* Floating card. rotate/scale are separate from transform so the
+   pointer position SortableJS writes is not overwritten. */
+.sortable-drag,
 .sortable-fallback {
     opacity: 1 !important;
-    transform: rotate(2deg) scale(1.05) !important;
-    box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.4),
-                0 0 0 3px var(--color-primary),
-                0 0 40px rgba(79, 70, 229, 0.4) !important;
+    rotate: 2deg;
+    scale: 1.04;
+    box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.35),
+                0 0 0 2px var(--color-primary) !important;
     border-radius: 0.75rem !important;
-    z-index: 99999 !important;
+    z-index: 100000 !important;
     pointer-events: none !important;
     cursor: grabbing !important;
-    background: white !important;
+    transition: none !important;
+    will-change: transform;
 }
 
-.dark .sortable-fallback {
-    background: #1f2937 !important;
-    box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.6),
-                0 0 0 3px var(--color-primary),
-                0 0 40px rgba(79, 70, 229, 0.5) !important;
+/* Lists while a task is being dragged */
+body.dragging .group\/list {
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+body.dragging .group\/list.list-drop-active > .border-dashed {
+    border-color: var(--color-primary) !important;
+    background-color: rgba(79, 70, 229, 0.06);
+    box-shadow: inset 0 0 0 1px rgba(79, 70, 229, 0.25);
 }
 
 /* Card draggable cursor states */
@@ -1225,16 +1364,61 @@ input:focus, textarea:focus, select:focus {
     border-color: var(--color-primary);
 }
 
+/* Board columns stay a fixed width. Only the list row scrolls sideways. */
+.board-shell,
+.board-shell > div {
+    max-width: 100%;
+    min-width: 0;
+}
+
+#boardLists.board-lists {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    align-items: stretch;
+}
+
+.board-list-column {
+    width: 300px;
+    min-width: 300px;
+    max-width: 300px;
+    flex: 0 0 300px;
+    max-height: 100%;
+    min-height: 0;
+}
+
+.board-list-panel {
+    min-height: 0;
+    max-height: 100%;
+}
+
+.board-list-cards {
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
 /* =====================================================
    21. DARK MODE ADJUSTMENTS
    ===================================================== */
 
 .dark {
     color-scheme: dark;
+    --surface-1: #171717;
+    --surface-2: #262626;
+    --surface-border: #404040;
+    --text-muted: #a3a3a3;
 }
 
 .dark body {
-    background-color: #111827;
+    background-color: #0a0a0a;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+    color: #a3a3a3;
 }
 
 /* Dark mode shadows */
@@ -1443,7 +1627,7 @@ html {
 }
 
 .dark .comment-time {
-    color: #6b7280;
+    color: #a3a3a3;
 }
 
 .comment-content {
@@ -1553,8 +1737,8 @@ html {
 }
 
 .dark .mention-token {
-    background-color: rgba(99, 102, 241, 0.2);
-    color: #a5b4fc;
+    background-color: rgba(255, 255, 255, 0.1);
+    color: var(--color-primary-text);
 }
 
 /* Code in comments */
@@ -1630,19 +1814,18 @@ html {
    Using CSS variables for dynamic theme colors
    ===================================================== */
 
-/* List container hover - dotted border changes to primary color */
+/* List container hover - dotted border uses the readable accent */
 .group\/list:hover > .border-dashed {
-    border-color: var(--color-primary) !important;
+    border-color: var(--color-primary-text) !important;
 }
 
-/* Card hover - border changes to primary color with opacity */
+/* Card hover - border and title stay visible on both light and dark surfaces */
 .card-draggable:hover > div {
-    border-color: rgba(var(--color-primary-rgb), 0.4) !important;
+    border-color: var(--color-primary-text) !important;
 }
 
-/* Card title hover - text changes to primary color */
 .card-draggable:hover h3 {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
 }
 
 /* =====================================================

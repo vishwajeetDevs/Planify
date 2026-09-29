@@ -162,18 +162,28 @@ function hasAccessToWorkspace($conn, $userId, $workspaceId) {
     return $result['board_count'] > 0;
 }
 
+// Display name for a membership role.
+// Stored values: owner = Super Admin, admin = Admin, member = Member.
+function roleLabel(?string $role): string {
+    return match ($role) {
+        'owner' => 'Super Admin',
+        'admin' => 'Admin',
+        'member' => 'Member',
+        default => 'Member',
+    };
+}
+
 // Check if user can edit board
 function canEditBoard($conn, $userId, $boardId) {
     $access = hasAccessToBoard($conn, $userId, $boardId);
-    // Owner, admin, and member can edit the board content
-    return $access && in_array($access['role'], ['owner', 'admin', 'member']);
+    return $access && in_array($access['role'], ['owner', 'admin', 'member'], true);
 }
 
 // Check if user can manage board members (add/remove/update roles)
 function canManageBoard($conn, $userId, $boardId) {
     $access = hasAccessToBoard($conn, $userId, $boardId);
-    // Only owner and admin can manage board settings and members
-    return $access && in_array($access['role'], ['owner', 'admin']);
+    // Super Admin and Admin can manage members
+    return $access && in_array($access['role'], ['owner', 'admin'], true);
 }
 
 // Check if user is board owner

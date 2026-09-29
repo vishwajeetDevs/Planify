@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
     theme ENUM('light', 'dark', 'system') DEFAULT 'light',
-    theme_color VARCHAR(20) DEFAULT 'purple',
+    theme_color VARCHAR(20) DEFAULT 'mono',
     email_verified_at TIMESTAMP NULL DEFAULT NULL,
     remember_token VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -41,12 +41,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
     INDEX idx_workspace_owner (owner_id)
 ) ENGINE=InnoDB;
 
+-- Membership roles: owner = Super Admin, admin = Admin, member = Member
 -- Workspace members table
 CREATE TABLE IF NOT EXISTS workspace_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id INT NOT NULL,
     user_id INT NOT NULL,
-    role ENUM('owner', 'admin', 'member', 'viewer') DEFAULT 'member',
+    role ENUM('owner', 'admin', 'member') DEFAULT 'member',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -79,7 +80,7 @@ CREATE TABLE IF NOT EXISTS board_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
     board_id INT NOT NULL,
     user_id INT NOT NULL,
-    role ENUM('owner', 'admin', 'member', 'commenter', 'viewer') DEFAULT 'member',
+    role ENUM('owner', 'admin', 'member') DEFAULT 'member',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
@@ -327,7 +328,7 @@ CREATE TABLE IF NOT EXISTS share_links (
     board_id INT NOT NULL,
     owner_id INT NOT NULL,
     token_hash VARCHAR(128) NOT NULL,
-    role_on_join ENUM('viewer', 'commenter', 'member') DEFAULT 'viewer',
+    role_on_join ENUM('admin', 'member') DEFAULT 'member',
     access_type ENUM('view_only', 'join_on_click', 'invite_only') DEFAULT 'join_on_click',
     max_uses INT DEFAULT NULL,
     uses INT DEFAULT 0,

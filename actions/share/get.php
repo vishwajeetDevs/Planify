@@ -29,8 +29,8 @@ $stmt->bind_param("ii", $boardId, $userId);
 $stmt->execute();
 $access = $stmt->get_result()->fetch_assoc();
 
-if (!$access || !in_array($access['role'], ['owner', 'admin', 'member'])) {
-    jsonResponse(['success' => false, 'message' => 'You do not have permission to view share links'], 403);
+if (!$access || !in_array($access['role'], ['owner', 'admin'], true)) {
+    jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can view share links'], 403);
 }
 
 try {

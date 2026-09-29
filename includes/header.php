@@ -18,7 +18,7 @@ $currentUser = isLoggedIn() ? getCurrentUser($conn) : null;
 $theme = $_SESSION['theme'] ?? 'light';
 
 // Get theme color from session or database
-$themeColor = $_SESSION['theme_color'] ?? 'purple';
+$themeColor = $_SESSION['theme_color'] ?? 'mono';
 if ($currentUser && isset($currentUser['theme_color'])) {
     $themeColor = $currentUser['theme_color'];
     $_SESSION['theme_color'] = $themeColor; // Sync session with database
@@ -89,10 +89,20 @@ $csrfToken = ensureCSRFToken();
                         primary: 'var(--color-primary)',
                         'primary-light': 'var(--color-primary-light)',
                         'primary-dark': 'var(--color-primary-dark)',
-                        secondary: '#3B82F6'
+                        secondary: '#525252',
+                        gray: {
+                            50: '#fafafa', 100: '#f5f5f5', 200: '#e5e5e5', 300: '#d4d4d4',
+                            400: '#a3a3a3', 500: '#737373', 600: '#525252', 700: '#404040',
+                            800: '#262626', 900: '#171717', 950: '#0a0a0a'
+                        },
+                        slate: {
+                            50: '#fafafa', 100: '#f5f5f5', 200: '#e5e5e5', 300: '#d4d4d4',
+                            400: '#a3a3a3', 500: '#737373', 600: '#525252', 700: '#404040',
+                            800: '#262626', 900: '#171717', 950: '#0a0a0a'
+                        }
                     },
                     borderColor: {
-                        primary: 'var(--color-primary)',
+                        primary: 'var(--color-primary-text)',
                         'primary-light': 'var(--color-primary-light)',
                         'primary-dark': 'var(--color-primary-dark)',
                     },
@@ -359,9 +369,8 @@ $csrfToken = ensureCSRFToken();
         <div class="mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
                 <div class="flex items-center">
-                    <a href="dashboard.php" class="flex items-center group/logo">
-                        <img src="<?php echo defined('BASE_PATH') ? BASE_PATH : ''; ?>/assets/images/planify_logo.png" alt="Planify" class="h-8 w-8 mr-2 transition-transform duration-300 group-hover/logo:scale-110">
-                        <span class="text-2xl font-bold text-primary dark:text-white transition-transform duration-300 group-hover/logo:scale-105">PLANIFY</span>
+                    <a href="dashboard.php" class="flex items-center">
+                        <span class="text-2xl font-bold tracking-tight text-primary dark:text-white">Planify</span>
                     </a>
                     
                     <!-- Global Search Bar (shown when logged in) -->
@@ -545,7 +554,13 @@ $csrfToken = ensureCSRFToken();
                 
                 init() {
                     this.fetchUnreadCount();
-                    // Poll for new notifications every 30 seconds
+                    window.addEventListener('planify:notification', () => {
+                        this.fetchUnreadCount();
+                        if (this.open) {
+                            this.loadNotifications();
+                        }
+                    });
+                    // Fallback if the live stream is disconnected
                     this.pollInterval = setInterval(() => {
                         this.fetchUnreadCount();
                     }, 30000);
@@ -639,8 +654,56 @@ $csrfToken = ensureCSRFToken();
                 },
                 
                 handleNotificationClick(notification) {
-                    // Just mark as read - notifications are view-only
                     this.markAsRead(notification);
+                    let data = notification.data;
+                    if (typeof data === 'string') {
+                        try { data = JSON.parse(data); } catch (e) { data = null; }
+                    }
+                    if (!data) return;
+
+                    const boardUrl = (opts) => {
+                        if (typeof window.planifyBoardUrl === 'function') {
+                            return window.planifyBoardUrl(opts);
+                        }
+                        const base = `${window.BASE_PATH || ''}/public/board.php`;
+                        const params = new URLSearchParams();
+                        if (opts.boardRef) params.set('ref', opts.boardRef);
+                        else if (opts.boardId) params.set('id', String(opts.boardId));
+                        if (opts.openRef) params.set('o', opts.openRef);
+                        else {
+                            if (opts.cardRef) params.set('c', opts.cardRef);
+                            else if (opts.cardId) params.set('c', String(opts.cardId));
+                            if (opts.listRef) params.set('l', opts.listRef);
+                            else if (opts.listId) params.set('l', String(opts.listId));
+                        }
+                        if (opts.open) params.set('open', opts.open);
+                        const qs = params.toString();
+                        return qs ? `${base}?${qs}` : base;
+                    };
+
+                    if (notification.type === 'join_request' && data.board_id) {
+                        window.location.href = boardUrl({ boardId: data.board_id, open: 'requests' });
+                        return;
+                    }
+
+                    if (data.open_ref) {
+                        window.location.href = boardUrl({ openRef: data.open_ref });
+                        return;
+                    }
+
+                    if (data.card_id && data.board_id) {
+                        window.location.href = boardUrl({
+                            boardRef: data.board_ref,
+                            boardId: data.board_ref ? undefined : data.board_id,
+                            cardId: data.card_id,
+                            listId: data.list_id
+                        });
+                        return;
+                    }
+
+                    if (data.board_id) {
+                        window.location.href = boardUrl({ boardId: data.board_id });
+                    }
                 },
                 
                 getNotificationIcon(type) {
@@ -653,7 +716,10 @@ $csrfToken = ensureCSRFToken();
                         'checklist': 'fas fa-check-square',
                         'attachment': 'fas fa-paperclip',
                         'task_completed': 'fas fa-check-circle',
-                        'task_moved': 'fas fa-arrows-alt'
+                        'task_moved': 'fas fa-arrows-alt',
+                        'join_request': 'fas fa-user-clock',
+                        'request_approved': 'fas fa-user-check',
+                        'request_rejected': 'fas fa-user-times'
                     };
                     return icons[type] || 'fas fa-bell';
                 },
@@ -663,12 +729,15 @@ $csrfToken = ensureCSRFToken();
                         'mention': 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400',
                         'assignment': 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
                         'task_update': 'bg-yellow-100 text-yellow-600 dark:bg-yellow-900/30 dark:text-yellow-400',
-                        'comment': 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400',
+                        'comment': 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
                         'due_date': 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400',
                         'checklist': 'bg-teal-100 text-teal-600 dark:bg-teal-900/30 dark:text-teal-400',
                         'attachment': 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
                         'task_completed': 'bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400',
-                        'task_moved': 'bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'
+                        'task_moved': 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300',
+                        'join_request': 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400',
+                        'request_approved': 'bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400',
+                        'request_rejected': 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400'
                     };
                     return classes[type] || 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400';
                 },

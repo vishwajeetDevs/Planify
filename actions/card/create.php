@@ -48,12 +48,12 @@ try {
         jsonResponse(['success' => false, 'message' => 'Permission denied'], 403);
     }
     
-    // Get max position
-    $stmt = $conn->prepare("SELECT MAX(position) as max_pos FROM cards WHERE list_id = ?");
-    $stmt->bind_param("i", $listId);
-    $stmt->execute();
-    $maxPos = $stmt->get_result()->fetch_assoc()['max_pos'] ?? 0;
-    $newPosition = $maxPos + 1;
+    // New tasks appear at the top of the list (below Add task)
+    $shiftStmt = $conn->prepare("UPDATE cards SET position = position + 1 WHERE list_id = ?");
+    $shiftStmt->bind_param("i", $listId);
+    $shiftStmt->execute();
+    $shiftStmt->close();
+    $newPosition = 0;
     
     // Insert card
     $stmt = $conn->prepare("

@@ -52,9 +52,8 @@ try {
         jsonResponse(['success' => false, 'message' => 'Share link not found'], 404);
     }
     
-    // Owner, admin, or the link creator can revoke
-    if (!in_array($shareLink['role'], ['owner', 'admin']) && $shareLink['owner_id'] !== $userId) {
-        jsonResponse(['success' => false, 'message' => 'You do not have permission to revoke this link'], 403);
+    if (!in_array($shareLink['role'], ['owner', 'admin'], true)) {
+        jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can revoke a share link'], 403);
     }
     
     if ($shareLink['is_revoked']) {

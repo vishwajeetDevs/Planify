@@ -42,7 +42,7 @@ if ($newOwnerId <= 0) {
 
 // Cannot transfer to yourself
 if ($newOwnerId === $currentUserId) {
-    jsonResponse(['success' => false, 'message' => 'You are already the owner'], 400);
+    jsonResponse(['success' => false, 'message' => 'You are already the Super Admin'], 400);
 }
 
 try {
@@ -62,7 +62,7 @@ try {
     }
     
     if ($currentUserMembership['role'] !== 'owner') {
-        jsonResponse(['success' => false, 'message' => 'Only the current owner can transfer ownership'], 403);
+        jsonResponse(['success' => false, 'message' => 'Only the current Super Admin can transfer this role'], 403);
     }
     
     // Check if new owner is a member of the board
@@ -90,8 +90,8 @@ try {
     // Begin transaction
     $conn->begin_transaction();
     
-    // Update current owner to member
-    $stmt = $conn->prepare("UPDATE board_members SET role = 'member' WHERE board_id = ? AND user_id = ?");
+    // Previous Super Admin becomes Admin (not Member)
+    $stmt = $conn->prepare("UPDATE board_members SET role = 'admin' WHERE board_id = ? AND user_id = ?");
     $stmt->bind_param("ii", $boardId, $currentUserId);
     if (!$stmt->execute()) {
         throw new Exception('Failed to update current owner role');
@@ -116,9 +116,9 @@ try {
     // Create notification for new owner
     $stmt = $conn->prepare("
         INSERT INTO notifications (user_id, type, title, message, data)
-        VALUES (?, 'ownership_received', 'Board Ownership Transferred', ?, ?)
+        VALUES (?, 'ownership_received', 'Super Admin Role Transferred', ?, ?)
     ");
-    $notificationMessage = "$currentUserName has transferred ownership of \"{$currentUserMembership['board_name']}\" to you";
+    $notificationMessage = "$currentUserName has transferred the Super Admin role for \"{$currentUserMembership['board_name']}\" to you";
     $notificationData = json_encode([
         'board_id' => $boardId,
         'board_name' => $currentUserMembership['board_name'],
@@ -132,7 +132,7 @@ try {
     
     jsonResponse([
         'success' => true, 
-        'message' => "Ownership transferred to {$newOwnerMembership['user_name']} successfully",
+        'message' => "Super Admin role transferred to {$newOwnerMembership['user_name']} successfully",
         'new_owner' => [
             'id' => $newOwnerId,
             'name' => $newOwnerMembership['user_name'],

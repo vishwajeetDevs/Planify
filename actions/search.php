@@ -20,20 +20,60 @@ if (strlen($query) < 2) {
 }
 
 try {
-    // Search cards with optional workspace/board filter
     $searchTerm = '%' . $query . '%';
-    
-    // Build dynamic query based on filters
+    $results = [];
+
+    // Boards (skip when already scoped to a single board — task search only)
+    if (!$boardId) {
+        $boardSql = "
+            SELECT b.id AS board_id, b.name AS board_name,
+                   w.id AS workspace_id, w.name AS workspace_name
+            FROM boards b
+            INNER JOIN workspaces w ON b.workspace_id = w.id
+            LEFT JOIN board_members bm ON b.id = bm.board_id
+            WHERE (b.created_by = ? OR bm.user_id = ?)
+              AND b.name LIKE ?
+        ";
+        $boardParams = [$userId, $userId, $searchTerm];
+        $boardTypes = 'iis';
+
+        if ($workspaceId) {
+            $boardSql .= ' AND w.id = ?';
+            $boardParams[] = $workspaceId;
+            $boardTypes .= 'i';
+        }
+
+        $boardSql .= ' GROUP BY b.id ORDER BY b.updated_at DESC LIMIT 8';
+
+        $boardStmt = $conn->prepare($boardSql);
+        $boardStmt->bind_param($boardTypes, ...$boardParams);
+        $boardStmt->execute();
+        $boards = $boardStmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $boardStmt->close();
+
+        foreach ($boards as $board) {
+            $results[] = [
+                'type' => 'board',
+                'board_id' => (int) $board['board_id'],
+                'board_name' => $board['board_name'],
+                'board_ref' => encryptId((int) $board['board_id']),
+                'workspace_id' => (int) $board['workspace_id'],
+                'workspace_name' => $board['workspace_name'],
+            ];
+        }
+    }
+
+    // Tasks / cards
     $sql = "
         SELECT c.id, c.title, c.description,
-               l.title as list_name,
-               b.id as board_id, b.name as board_name,
-               w.id as workspace_id, w.name as workspace_name,
+               l.id AS list_id, l.title AS list_name,
+               b.id AS board_id, b.name AS board_name,
+               w.id AS workspace_id, w.name AS workspace_name,
                c.due_date, c.priority,
-               (SELECT GROUP_CONCAT(u.name SEPARATOR ', ') 
-                FROM card_assignees ca 
-                JOIN users u ON ca.user_id = u.id 
-                WHERE ca.card_id = c.id) as assignees
+               (SELECT GROUP_CONCAT(u.name SEPARATOR ', ')
+                FROM card_assignees ca
+                JOIN users u ON ca.user_id = u.id
+                WHERE ca.card_id = c.id) AS assignees
         FROM cards c
         INNER JOIN lists l ON c.list_id = l.id
         INNER JOIN boards b ON l.board_id = b.id
@@ -42,50 +82,52 @@ try {
         WHERE (b.created_by = ? OR bm.user_id = ?)
           AND (c.title LIKE ? OR c.description LIKE ?)
     ";
-    
+
     $params = [$userId, $userId, $searchTerm, $searchTerm];
-    $types = "iiss";
-    
-    // Add workspace filter if provided
+    $types = 'iiss';
+
     if ($workspaceId) {
-        $sql .= " AND w.id = ?";
+        $sql .= ' AND w.id = ?';
         $params[] = $workspaceId;
-        $types .= "i";
+        $types .= 'i';
     }
-    
-    // Add board filter if provided
+
     if ($boardId) {
-        $sql .= " AND b.id = ?";
+        $sql .= ' AND b.id = ?';
         $params[] = $boardId;
-        $types .= "i";
+        $types .= 'i';
     }
-    
-    $sql .= " GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 15";
-    
+
+    $sql .= ' GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 15';
+
     $stmt = $conn->prepare($sql);
     $stmt->bind_param($types, ...$params);
     $stmt->execute();
-    $results = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-    
-    // Format results with additional info
-    foreach ($results as &$result) {
-        // Add encrypted board reference for secure URLs
-        $result['board_ref'] = encryptId($result['board_id']);
-        
-        // Format due date and calculate priority based on deadline
+    $cards = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    foreach ($cards as $result) {
+        $result['type'] = 'task';
+        $result['board_ref'] = encryptId((int) $result['board_id']);
+        $result['list_id'] = (int) $result['list_id'];
+        $result['open_ref'] = encryptOpenToken(
+            (int) $result['board_id'],
+            (int) $result['id'],
+            null
+        );
+
         if ($result['due_date']) {
             $dueDate = new DateTime($result['due_date']);
             $today = new DateTime();
             $today->setTime(0, 0, 0);
             $dueDate->setTime(0, 0, 0);
-            
+
             $diff = $today->diff($dueDate);
-            $daysUntilDue = (int)$diff->format('%r%a'); // Negative if overdue
-            
+            $daysUntilDue = (int) $diff->format('%r%a');
+
             $result['due_date_formatted'] = $dueDate->format('M j, Y');
             $result['is_overdue'] = $daysUntilDue < 0;
-            
-            // Calculate priority based on due date
+
             if ($daysUntilDue < 0) {
                 $result['priority'] = 'overdue';
                 $result['priority_label'] = 'Overdue';
@@ -100,22 +142,22 @@ try {
                 $result['priority_label'] = 'Low';
             }
         } else {
-            // No due date - no priority
             $result['priority'] = null;
             $result['priority_label'] = null;
         }
+
+        $results[] = $result;
     }
-    
+
     jsonResponse([
         'success' => true,
         'results' => $results,
         'count' => count($results),
         'filters' => [
             'workspace_id' => $workspaceId,
-            'board_id' => $boardId
-        ]
+            'board_id' => $boardId,
+        ],
     ]);
 } catch (Exception $e) {
     jsonResponse(['success' => false, 'message' => 'Search error: ' . $e->getMessage()], 500);
 }
-?>

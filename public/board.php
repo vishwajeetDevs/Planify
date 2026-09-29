@@ -24,8 +24,27 @@ requireLogin();
 $pageTitle = 'Board - Planify';
 $includeDragDrop = true;
 
-// Get board ID (supports both encrypted 'ref' and plain 'id' for backward compatibility)
-$boardId = getDecryptedId('ref');
+// Board + optional task deep link via compact ?o= token (or ref / id)
+$deepLinkCardId = null;
+$deepLinkListId = null;
+$boardId = false;
+
+if (!empty($_GET['o'])) {
+    $opened = decryptOpenToken((string) $_GET['o']);
+    if ($opened !== false) {
+        $boardId = $opened['board'];
+        if ($opened['card'] > 0) {
+            $deepLinkCardId = $opened['card'];
+        }
+        if ($opened['list'] > 0) {
+            $deepLinkListId = $opened['list'];
+        }
+    }
+}
+
+if (!$boardId) {
+    $boardId = getDecryptedId('ref');
+}
 
 if (!$boardId) {
     showInvalidAccessError('Invalid or unauthorized access to board.');
@@ -74,6 +93,58 @@ if (!$userAccess) {
     exit;
 }
 
+// Legacy deep links: ?c= / ?card= task; ?l= / ?list= column (validated on this board)
+if ($deepLinkCardId === null && (isset($_GET['c']) || isset($_GET['card']))) {
+    $requestedCardId = getDecryptedQueryInt('c', 'card');
+    if ($requestedCardId) {
+        $deepStmt = $conn->prepare("
+            SELECT c.id, c.list_id
+            FROM cards c
+            INNER JOIN lists l ON c.list_id = l.id
+            WHERE c.id = ? AND l.board_id = ?
+        ");
+        $deepStmt->bind_param('ii', $requestedCardId, $boardId);
+        $deepStmt->execute();
+        $deepCard = $deepStmt->get_result()->fetch_assoc();
+        $deepStmt->close();
+        if ($deepCard) {
+            $deepLinkCardId = (int) $deepCard['id'];
+            $deepLinkListId = (int) $deepCard['list_id'];
+        } else {
+            $_SESSION['error_message'] = 'That task was not found on this board.';
+        }
+    }
+}
+
+if ($deepLinkListId === null && (isset($_GET['l']) || isset($_GET['list']))) {
+    $requestedListId = getDecryptedQueryInt('l', 'list');
+    if ($requestedListId) {
+        $listStmt = $conn->prepare('SELECT id FROM lists WHERE id = ? AND board_id = ?');
+        $listStmt->bind_param('ii', $requestedListId, $boardId);
+        $listStmt->execute();
+        $listRow = $listStmt->get_result()->fetch_assoc();
+        $listStmt->close();
+        if ($listRow) {
+            $deepLinkListId = (int) $listRow['id'];
+        }
+    }
+}
+
+if ($deepLinkCardId !== null && $deepLinkListId === null) {
+    $listFromCard = $conn->prepare('
+        SELECT c.list_id FROM cards c
+        INNER JOIN lists l ON c.list_id = l.id
+        WHERE c.id = ? AND l.board_id = ?
+    ');
+    $listFromCard->bind_param('ii', $deepLinkCardId, $boardId);
+    $listFromCard->execute();
+    $listRow = $listFromCard->get_result()->fetch_assoc();
+    $listFromCard->close();
+    if ($listRow) {
+        $deepLinkListId = (int) $listRow['list_id'];
+    }
+}
+
 // Include header after all redirects are done
 $showSearch = true; // Show search bar on board page
 require_once ROOT_PATH . '/includes/header.php';
@@ -92,9 +163,53 @@ require_once ROOT_PATH . '/includes/header.php';
 .dark .card-completed .block.rounded-lg {
     background-color: rgba(55, 65, 81, 0.5) !important; /* gray-700/50 */
 }
+
+/* No page-level vertical scroll — lists scroll inside columns */
+html.board-viewport-lock,
+html.board-viewport-lock body {
+    overflow: hidden !important;
+    height: 100%;
+    max-height: 100dvh;
+}
+.board-shell-viewport {
+    height: calc(100dvh - 4rem);
+    max-height: calc(100dvh - 4rem);
+}
+.board-shell-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+.board-lists-row {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+}
+.board-list-column {
+    display: flex;
+    flex-direction: column;
+    max-height: 100%;
+    min-height: 0;
+}
+.board-list-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: 100%;
+}
+.board-list-cards {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+}
 </style>
+<script>document.documentElement.classList.add('board-viewport-lock');</script>
 <?php
-$canEdit = in_array($userAccess['role'], ['owner', 'member']);
+$canEdit = in_array($userAccess['role'], ['owner', 'admin', 'member'], true);
 
 // Get lists with cards count and created_at
 $stmt = $conn->prepare("
@@ -251,10 +366,12 @@ $stmt->bind_param("i", $boardId);
 $stmt->execute();
 $activities = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-// Get pending join requests count (only for board owners)
+// Pending access requests are reviewed by the Super Admin and Admins
 $pendingRequestsCount = 0;
 $isOwner = ($userAccess['role'] === 'owner');
-if ($isOwner) {
+$canShare = in_array($userAccess['role'], ['owner', 'admin'], true);
+$canReviewRequests = $canShare;
+if ($canReviewRequests) {
     $stmt = $conn->prepare("
         SELECT COUNT(*) as count
         FROM join_requests jr
@@ -275,9 +392,8 @@ $stmt = $conn->prepare("
     ORDER BY 
         CASE bm.role 
             WHEN 'owner' THEN 1 
-            WHEN 'member' THEN 2 
-            WHEN 'commenter' THEN 3
-            WHEN 'viewer' THEN 4 
+            WHEN 'admin' THEN 2 
+            WHEN 'member' THEN 3 
         END,
         u.name ASC
 ");
@@ -297,42 +413,75 @@ foreach ($boardMembers as $member) {
 }
 ?>
 
-<div class="bg-slate-50/80 dark:bg-gray-900/95">
-    <div class="w-full px-4 sm:px-6 lg:px-8 py-6">
-        <!-- Board Header -->
-        <div class="mb-6 border-b-2 border-dashed border-gray-200 dark:border-gray-700 bg-white/80 dark:bg-gray-900/70 backdrop-blur-xl transition-all duration-300">
-            <div class="p-5 sm:p-6">
-                <!-- Breadcrumb -->
-                <div class="flex items-center text-xs sm:text-sm text-gray-500 dark:text-gray-400 mb-3">
-                    <a href="dashboard.php" class="font-medium text-primary hover:underline">Dashboard</a>
-                    <span class="mx-2 text-gray-400">/</span>
-                    <a href="<?php echo encryptedUrl('workspace.php', $board['workspace_id']); ?>" class="font-medium text-primary hover:underline">
-                        <?php echo e($board['workspace_name']); ?>
-                    </a>
-                    <span class="mx-2 text-gray-400">/</span>
-                    <span class="text-gray-700 dark:text-gray-300 font-medium"><?php echo e($board['name']); ?></span>
-                </div>
-
-                <!-- Title + Actions -->
-                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                    <div class="flex items-center gap-3">
-                        <h1 class="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+<div class="board-shell board-shell-viewport bg-slate-50/80 dark:bg-gray-900/95 max-w-full min-w-0 overflow-hidden flex flex-col">
+    <div class="board-shell-inner w-full max-w-full min-w-0 px-4 sm:px-6 lg:px-8 pt-4 pb-2">
+        <!-- Board title bar: what this board is, who is on it, what you can do -->
+        <div class="mb-3 shrink-0">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 min-w-0">
+                <div class="flex items-center gap-4 min-w-0">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <h1 id="boardTitle" class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
                             <?php echo e($board['name']); ?>
                         </h1>
-                        <span class="inline-flex items-center px-3 py-1 text-xs font-semibold rounded-full bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light">
-                            <?php echo ($userAccess['role'] === 'owner') ? 'Admin' : ucfirst($userAccess['role']); ?>
+                        <span class="board-role-badge inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded-full bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light whitespace-nowrap">
+                            <?php echo e(roleLabel($userAccess['role'])); ?>
                         </span>
                     </div>
 
-                    <div class="flex items-center gap-2">
+                    <button
+                        type="button"
+                        onclick="showMembersModal()"
+                        class="hidden sm:inline-flex items-center gap-2 h-8 pl-1.5 pr-3 rounded-full border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors shrink-0"
+                        title="View board members"
+                    >
+                        <div class="flex -space-x-1.5">
+                                <?php 
+                                $displayLimit = 5;
+                                $displayedMembers = array_slice($boardMembers, 0, $displayLimit);
+                                foreach ($displayedMembers as $member): 
+                                    $initials = strtoupper(substr($member['name'], 0, 1));
+                                    $isOwnerMember = ($member['role'] === 'owner');
+                                    $hasValidAvatar = !empty($member['avatar']) 
+                                        && $member['avatar'] !== 'default-avatar.png' 
+                                        && file_exists(ROOT_PATH . '/assets/uploads/avatars/' . $member['avatar']);
+                                ?>
+                            <?php if ($hasValidAvatar): ?>
+                            <img 
+                                src="<?php echo defined('BASE_PATH') ? BASE_PATH : ''; ?>/assets/uploads/avatars/<?php echo e($member['avatar']); ?>" 
+                                alt="<?php echo e($member['name']); ?>"
+                                title="<?php echo e($member['name']); ?><?php echo $isOwnerMember ? ' (Super Admin)' : ''; ?>"
+                                class="w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 object-cover"
+                            >
+                            <?php else: ?>
+                            <div 
+                                title="<?php echo e($member['name']); ?><?php echo $isOwnerMember ? ' (Super Admin)' : ''; ?>"
+                                class="w-6 h-6 rounded-full border-2 <?php echo $isOwnerMember ? 'border-white dark:border-gray-900 bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'border-white dark:border-gray-900 bg-primary text-white'; ?> flex items-center justify-center text-[10px] font-semibold"
+                            >
+                                <?php echo $initials; ?>
+                            </div>
+                            <?php endif; ?>
+                            <?php endforeach; ?>
+                            <?php if (count($boardMembers) > $displayLimit): ?>
+                            <div class="w-6 h-6 rounded-full border-2 border-white dark:border-gray-900 bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[10px] font-semibold text-gray-700 dark:text-gray-200">
+                                +<?php echo count($boardMembers) - $displayLimit; ?>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                        <span class="text-xs font-medium text-gray-700 dark:text-gray-200 whitespace-nowrap">
+                            <?php echo count($boardMembers); ?> member<?php echo count($boardMembers) !== 1 ? 's' : ''; ?>
+                        </span>
+                    </button>
+                </div>
+
+                <div class="flex items-center gap-2 flex-wrap lg:justify-end shrink-0">
                         <?php if ($canEdit): ?>
                         <!-- Import Plans Button -->
                         <button 
                             onclick="showImportModal()"
-                            class="inline-flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-200/80 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 text-gray-700 dark:text-gray-200 hover:bg-gray-100/90 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+                            class="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                             title="Import tasks from file"
                         >
-                            <i class="fas fa-file-import mr-2 text-xs text-primary"></i>
+                            <i class="fas fa-file-import mr-2 text-xs text-gray-500 dark:text-gray-400"></i>
                             Import
                         </button>
                         <?php endif; ?>
@@ -341,10 +490,10 @@ foreach ($boardMembers as $member) {
                         <!-- Export Button (Board Owner Only) -->
                         <button 
                             onclick="showExportModal()"
-                            class="inline-flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-200/80 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 text-gray-700 dark:text-gray-200 hover:bg-gray-100/90 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+                            class="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                             title="Export board tasks"
                         >
-                            <i class="fas fa-file-export mr-2 text-xs text-primary"></i>
+                            <i class="fas fa-file-export mr-2 text-xs text-gray-500 dark:text-gray-400"></i>
                             Export
                         </button>
                         <?php endif; ?>
@@ -352,20 +501,19 @@ foreach ($boardMembers as $member) {
                         <!-- Activity Button -->
                         <button 
                             onclick="showActivityModal()"
-                            class="inline-flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-200/80 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 text-gray-700 dark:text-gray-200 hover:bg-gray-100/90 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+                            class="inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         >
-                            <i class="fas fa-history mr-2 text-xs"></i>
+                            <i class="fas fa-history mr-2 text-xs text-gray-500 dark:text-gray-400"></i>
                             Activity
                         </button>
 
-                        <?php if ($canEdit): ?>
-                        <!-- Share Button -->
+                        <?php if ($canShare): ?>
                         <button 
                             id="shareButton"
                             type="button"
-                            class="relative inline-flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg border border-gray-200/80 dark:border-gray-700 bg-white/70 dark:bg-gray-900/70 text-gray-700 dark:text-gray-200 hover:bg-gray-100/90 dark:hover:bg-gray-800 hover:shadow-sm transition-all duration-200"
+                            class="relative inline-flex items-center h-9 px-3 text-sm font-medium rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
                         >
-                            <i class="fas fa-share-alt mr-2 text-xs"></i>
+                            <i class="fas fa-share-alt mr-2 text-xs text-gray-500 dark:text-gray-400"></i>
                             Share
                             <?php if ($pendingRequestsCount > 0): ?>
                             <span id="pendingRequestsBadge" class="absolute -top-2 -right-2 inline-flex items-center justify-center px-2 py-1 text-xs font-bold leading-none text-white bg-red-500 rounded-full min-w-[20px] h-5 animate-pulse">
@@ -373,90 +521,29 @@ foreach ($boardMembers as $member) {
                             </span>
                             <?php endif; ?>
                         </button>
+                        <?php endif; ?>
 
+                        <?php if ($canEdit): ?>
                         <!-- Add List Button -->
                         <button 
                             onclick="showAddListModal()"
-                            class="inline-flex items-center px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary-dark shadow-md shadow-primary/30 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200"
+                            class="inline-flex items-center h-9 px-3.5 text-sm font-medium rounded-lg text-white bg-primary hover:bg-primary-dark shadow-sm transition-colors"
                         >
                             <i class="fas fa-plus mr-2 text-xs"></i>
                             Add List
                         </button>
                         <?php endif; ?>
-                    </div>
-                </div>
-
-                <!-- Board Members Preview (Avatars) -->
-                <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">
-                    <div class="flex items-center justify-between">
-                        <div class="flex items-center gap-3">
-                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Board Members</span>
-                            <div class="flex -space-x-2">
-                                <?php 
-                                $displayLimit = 8;
-                                $displayedMembers = array_slice($boardMembers, 0, $displayLimit);
-                                foreach ($displayedMembers as $member): 
-                                    $initials = strtoupper(substr($member['name'], 0, 1));
-                                    $isOwnerMember = ($member['role'] === 'owner');
-                                    // Check if avatar exists and is not a default placeholder
-                                    $hasValidAvatar = !empty($member['avatar']) 
-                                        && $member['avatar'] !== 'default-avatar.png' 
-                                        && file_exists(ROOT_PATH . '/assets/uploads/avatars/' . $member['avatar']);
-                                ?>
-                                <div class="relative group/avatar">
-                                    <?php if ($hasValidAvatar): ?>
-                                    <img 
-                                        src="<?php echo defined('BASE_PATH') ? BASE_PATH : ''; ?>/assets/uploads/avatars/<?php echo e($member['avatar']); ?>" 
-                                        alt="<?php echo e($member['name']); ?>"
-                                        class="w-8 h-8 rounded-full border-2 <?php echo $isOwnerMember ? 'border-amber-400' : 'border-white dark:border-gray-800'; ?> object-cover hover:z-10 hover:scale-110 transition-transform cursor-pointer"
-                                        onclick="showMembersModal()"
-                                    >
-                                    <?php else: ?>
-                                    <div 
-                                        class="w-8 h-8 rounded-full border-2 <?php echo $isOwnerMember ? 'border-amber-400 bg-gradient-to-br from-amber-400 to-orange-500 text-white' : 'border-white dark:border-gray-800 bg-primary text-white'; ?> flex items-center justify-center text-xs font-semibold hover:z-10 hover:scale-110 transition-transform cursor-pointer shadow-sm"
-                                        onclick="showMembersModal()"
-                                    >
-                                        <?php echo $initials; ?>
-                                    </div>
-                                    <?php endif; ?>
-                                    <!-- Tooltip -->
-                                    <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 dark:bg-gray-700 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover/avatar:opacity-100 transition-opacity pointer-events-none z-20">
-                                        <?php echo e($member['name']); ?>
-                                        <?php if ($isOwnerMember): ?>
-                                        <span class="text-amber-400">(Admin)</span>
-                                        <?php endif; ?>
-                                    </div>
-                                </div>
-                                <?php endforeach; ?>
-                                
-                                <?php if (count($boardMembers) > $displayLimit): ?>
-                                <div 
-                                    class="w-8 h-8 rounded-full border-2 border-white dark:border-gray-800 bg-gray-100 dark:bg-gray-700 flex items-center justify-center text-xs font-semibold text-gray-600 dark:text-gray-300 hover:z-10 hover:scale-110 transition-transform cursor-pointer"
-                                    onclick="showMembersModal()"
-                                >
-                                    +<?php echo count($boardMembers) - $displayLimit; ?>
-                                </div>
-                                <?php endif; ?>
-                            </div>
-                        </div>
-                        <button 
-                            onclick="showMembersModal()"
-                            class="text-xs text-primary hover:text-primary-dark font-medium transition-colors"
-                        >
-                            View all
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Lists + Cards -->
-        <div class="flex items-start gap-4 pb-6 px-1 w-full overflow-x-auto custom-scrollbar mb-20 sm:mb-24 md:mb-28 lg:mb-28">
+        <div id="boardLists" class="board-lists board-lists-row flex gap-4 pb-2 px-0.5 w-full min-w-0 max-w-full overflow-x-auto overflow-y-hidden custom-scrollbar">
             <?php foreach ($lists as $list): ?>
-                <div class="min-w-[280px] max-w-[320px] flex-shrink-0 group/list" data-list-id="<?php echo $list['id']; ?>">
-                    <div class="flex flex-col bg-white/90 dark:bg-gray-900/80 backdrop-blur-lg rounded-md border-2 border-dashed border-gray-200 dark:border-gray-700 group-hover/list:border-primary dark:group-hover/list:border-primary transition-all duration-200">
+                <div class="board-list-column w-[300px] min-w-[300px] max-w-[300px] shrink-0 group/list h-full" data-list-id="<?php echo $list['id']; ?>">
+                    <div class="board-list-panel flex flex-col bg-white/90 dark:bg-gray-900/80 backdrop-blur-lg rounded-md border-2 border-dashed border-gray-200 dark:border-gray-700 group-hover/list:border-primary dark:group-hover/list:border-primary transition-all duration-200">
                         <!-- List Header -->
-                        <div class="px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between group">
+                        <div class="px-3 py-2 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between group">
                             <h3 class="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
                                 <?php echo e($list['title']); ?>
                             </h3>
@@ -473,8 +560,29 @@ foreach ($boardMembers as $member) {
                                 <!-- Dropdown menu -->
                                 <div 
                                     id="list-menu-<?php echo $list['id']; ?>" 
-                                    class="hidden absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
+                                    class="list-menu hidden absolute right-0 mt-1 w-44 bg-white dark:bg-gray-800 rounded-md shadow-lg py-1 z-50 border border-gray-200 dark:border-gray-700"
                                 >
+                                    <a 
+                                        href="#" 
+                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        onclick="event.preventDefault(); document.getElementById('list-menu-<?php echo $list['id']; ?>').classList.add('hidden'); showAddListModal();"
+                                    >
+                                        <i class="fas fa-plus mr-2"></i> Add list
+                                    </a>
+                                    <a 
+                                        href="#" 
+                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        onclick="event.preventDefault(); document.getElementById('list-menu-<?php echo $list['id']; ?>').classList.add('hidden'); showAddCardModal(<?php echo $list['id']; ?>);"
+                                    >
+                                        <i class="fas fa-tasks mr-2"></i> Add task
+                                    </a>
+                                    <a 
+                                        href="#" 
+                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                                        onclick="event.preventDefault(); showEditListModal(<?php echo $list['id']; ?>, '<?php echo addslashes($list['title']); ?>')"
+                                    >
+                                        <i class="far fa-edit mr-2"></i> Edit list
+                                    </a>
                                     <a 
                                         href="#" 
                                         class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -491,25 +599,33 @@ foreach ($boardMembers as $member) {
                                     </a>
                                     <a 
                                         href="#" 
-                                        class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
-                                        onclick="event.preventDefault(); showEditListModal(<?php echo $list['id']; ?>, '<?php echo addslashes($list['title']); ?>')"
-                                    >
-                                        <i class="far fa-edit mr-2"></i> Edit List
-                                    </a>
-                                    <a 
-                                        href="#" 
                                         class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
                                         onclick="event.preventDefault(); deleteList(<?php echo $list['id']; ?>)"
                                     >
-                                        <i class="far fa-trash-alt mr-2"></i> Delete List
+                                        <i class="far fa-trash-alt mr-2"></i> Delete list
                                     </a>
                                 </div>
                             </div>
                             <?php endif; ?>
                         </div>
 
+                        <?php if ($canEdit):
+                            $listHasCards = !empty($cardsByList[$list['id']]);
+                        ?>
+                        <div id="list-add-task-wrap-<?php echo $list['id']; ?>" class="px-2.5 pt-2 pb-1 shrink-0<?php echo $listHasCards ? ' hidden' : ''; ?>">
+                            <button 
+                                type="button"
+                                onclick="showAddCardModal(<?php echo $list['id']; ?>)"
+                                class="w-full py-1.5 text-xs font-medium text-gray-600 dark:text-gray-300 bg-slate-50/80 dark:bg-gray-800/80 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-md border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center gap-1.5 transition-colors"
+                            >
+                                <i class="fas fa-plus text-xs"></i>
+                                Add task
+                            </button>
+                        </div>
+                        <?php endif; ?>
+
                         <!-- Cards Container -->
-                        <div class="p-3 space-y-3 overflow-y-auto max-h-[calc(100vh-200px)] custom-scrollbar" style="min-height: 40px;" 
+                        <div class="board-list-cards px-2.5 pb-2.5 pt-0 space-y-3 custom-scrollbar" style="min-height: 40px;" 
                              data-list-id="<?php echo $list['id']; ?>" 
                              id="list-<?php echo $list['id']; ?>">
                             <?php if (isset($cardsByList[$list['id']])): ?>
@@ -772,7 +888,7 @@ foreach ($boardMembers as $member) {
                                                                         <?php if ($user): ?>
                                                                             <img 
                                                                                 class="h-5 w-5 rounded-full border border-white dark:border-gray-800 shadow-sm"
-                                                                                src="<?php echo !empty($user['avatar']) ? '../' . $user['avatar'] : 'https://ui-avatars.com/api/?name=' . urlencode($user['name']) . '&background=4F46E5&color=fff'; ?>" 
+                                                                                src="<?php echo !empty($user['avatar']) ? '../' . $user['avatar'] : 'https://ui-avatars.com/api/?name=' . urlencode($user['name']) . '&background=171717&color=fff'; ?>" 
                                                                                 alt="<?php echo e($user['name']); ?>"
                                                                                 title="<?php echo e($user['name']); ?>"
                                                                             >
@@ -821,19 +937,6 @@ foreach ($boardMembers as $member) {
                                 <?php endforeach; ?>
                             <?php endif; ?>
                         </div>
-
-                        <!-- Add Card Button -->
-                        <?php if ($canEdit): ?>
-                        <div class="px-3 pb-3 pt-1">
-                            <button 
-                                onclick="showAddCardModal(<?php echo $list['id']; ?>)"
-                                class="w-full py-2 text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-300 bg-slate-50/80 dark:bg-gray-800/80 hover:bg-slate-100 dark:hover:bg-gray-700 rounded-md border border-dashed border-gray-300 dark:border-gray-600 flex items-center justify-center gap-2 transition-all duration-200"
-                            >
-                                <i class="fas fa-plus text-xs"></i>
-                                Add task
-                            </button>
-                        </div>
-                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -894,7 +997,7 @@ foreach ($boardMembers as $member) {
             <!-- Owner Section -->
             <div class="mb-6">
                 <h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <i class="fas fa-crown text-amber-500"></i> Board Admin
+                    <i class="fas fa-crown text-amber-500"></i> Super Admin
                 </h4>
                 <div class="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-amber-200/50 dark:border-amber-700/30">
                     <div class="flex items-center gap-4">
@@ -918,8 +1021,8 @@ foreach ($boardMembers as $member) {
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2">
                                 <h5 class="font-semibold text-gray-900 dark:text-white truncate"><?php echo e($boardOwner['name']); ?></h5>
-                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200">
-                                    <i class="fas fa-crown mr-1 text-[10px]"></i> Admin
+                                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900">
+                                    <i class="fas fa-crown mr-1 text-[10px]"></i> Super Admin
                                 </span>
                             </div>
                             <p class="text-sm text-gray-500 dark:text-gray-400 truncate"><?php echo e($boardOwner['email']); ?></p>
@@ -942,15 +1045,15 @@ foreach ($boardMembers as $member) {
                             && $member['avatar'] !== 'default-avatar.png' 
                             && file_exists(ROOT_PATH . '/assets/uploads/avatars/' . $member['avatar']);
                         $roleColors = [
-                            'member' => 'bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-200',
-                            'commenter' => 'bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-200',
-                            'viewer' => 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                            'owner' => 'bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900',
+                            'admin' => 'bg-neutral-200 dark:bg-neutral-700 text-neutral-800 dark:text-neutral-100',
+                            'member' => 'bg-neutral-100 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-200',
                         ];
-                        $roleColor = $roleColors[$member['role']] ?? $roleColors['viewer'];
+                        $roleColor = $roleColors[$member['role']] ?? $roleColors['member'];
                         $roleIcons = [
-                            'member' => 'fa-user-edit',
-                            'commenter' => 'fa-comment',
-                            'viewer' => 'fa-eye'
+                            'owner' => 'fa-crown',
+                            'admin' => 'fa-user-shield',
+                            'member' => 'fa-user',
                         ];
                         $roleIcon = $roleIcons[$member['role']] ?? 'fa-user';
                         $isCurrentUser = ($member['id'] == $_SESSION['user_id']);
@@ -979,25 +1082,56 @@ foreach ($boardMembers as $member) {
                         <div class="flex items-center gap-2">
                             <span class="inline-flex items-center px-2 py-1 rounded text-xs font-medium <?php echo $roleColor; ?>">
                                 <i class="fas <?php echo $roleIcon; ?> mr-1 text-[10px]"></i>
-                                <?php echo ($member['role'] === 'owner') ? 'Admin' : ucfirst($member['role']); ?>
+                                <?php echo e(roleLabel($member['role'])); ?>
                             </span>
-                            <?php if ($isOwner && !$isCurrentUser): ?>
-                            <!-- Admin actions: Remove member or Transfer admin role -->
-                            <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <?php
+                            $canTransferRole = $isOwner && !$isCurrentUser;
+                            $canPromoteMember = !$isCurrentUser && $member['role'] === 'member' && ($isOwner || $userAccess['role'] === 'admin');
+                            $canDemoteAdmin = $isOwner && !$isCurrentUser && $member['role'] === 'admin';
+                            $canRemoveMember = !$isCurrentUser && ($isOwner || ($userAccess['role'] === 'admin' && $member['role'] === 'member'));
+                            ?>
+                            <?php if ($canTransferRole || $canPromoteMember || $canDemoteAdmin || $canRemoveMember): ?>
+                            <div class="flex gap-1">
+                                <?php if ($canTransferRole): ?>
                                 <button 
+                                    type="button"
                                     onclick="showTransferOwnershipConfirm(<?php echo $member['id']; ?>, '<?php echo e(addslashes($member['name'])); ?>')"
                                     class="p-1.5 text-amber-600 hover:text-amber-700 dark:text-amber-400 dark:hover:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-900/30 rounded transition-colors"
-                                    title="Transfer admin role to this member"
+                                    title="Transfer Super Admin role to this member"
                                 >
                                     <i class="fas fa-crown text-xs"></i>
                                 </button>
+                                <?php endif; ?>
+                                <?php if ($canPromoteMember): ?>
                                 <button 
+                                    type="button"
+                                    onclick="updateMemberRole(<?php echo $member['id']; ?>, '<?php echo e(addslashes($member['name'])); ?>', 'admin')"
+                                    class="p-1.5 text-purple-600 hover:text-purple-700 dark:text-purple-400 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30 rounded transition-colors"
+                                    title="Promote to Admin"
+                                >
+                                    <i class="fas fa-user-shield text-xs"></i>
+                                </button>
+                                <?php endif; ?>
+                                <?php if ($canDemoteAdmin): ?>
+                                <button 
+                                    type="button"
+                                    onclick="updateMemberRole(<?php echo $member['id']; ?>, '<?php echo e(addslashes($member['name'])); ?>', 'member')"
+                                    class="p-1.5 text-gray-600 hover:text-gray-800 dark:text-gray-300 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+                                    title="Demote to Member"
+                                >
+                                    <i class="fas fa-user text-xs"></i>
+                                </button>
+                                <?php endif; ?>
+                                <?php if ($canRemoveMember): ?>
+                                <button 
+                                    type="button"
                                     onclick="showRemoveMemberConfirm(<?php echo $member['id']; ?>, '<?php echo e(addslashes($member['name'])); ?>')"
                                     class="p-1.5 text-red-600 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
                                     title="Remove from board"
                                 >
                                     <i class="fas fa-user-minus text-xs"></i>
                                 </button>
+                                <?php endif; ?>
                             </div>
                             <?php endif; ?>
                         </div>
@@ -1027,7 +1161,7 @@ foreach ($boardMembers as $member) {
                 <?php else: ?>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
                     <i class="fas fa-info-circle mr-1"></i>
-                    As admin, transfer admin role before leaving.
+                    As Super Admin, transfer that role before leaving.
                 </p>
                 <?php endif; ?>
                 <button 
@@ -1104,6 +1238,41 @@ foreach ($boardMembers as $member) {
     </div>
 </div>
 
+<!-- Promote / Demote Confirmation Modal -->
+<div id="roleChangeModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-[80] flex items-center justify-center p-4 hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl">
+        <div class="p-6">
+            <div id="roleChangeIcon" class="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-neutral-100 dark:bg-neutral-700">
+                <i class="fas fa-user text-neutral-700 dark:text-neutral-200 text-xl"></i>
+            </div>
+            <h3 id="roleChangeTitle" class="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Change role?</h3>
+            <p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-6">
+                <strong id="roleChangeName" class="text-gray-900 dark:text-white"></strong>
+                <span id="roleChangeDetail"></span>
+            </p>
+            <input type="hidden" id="roleChangeUserId" value="">
+            <input type="hidden" id="roleChangeRole" value="">
+            <div class="flex gap-3">
+                <button
+                    type="button"
+                    onclick="hideRoleChangeModal()"
+                    class="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="button"
+                    onclick="confirmMemberRole()"
+                    id="roleChangeBtn"
+                    class="flex-1 px-4 py-2.5 text-sm font-medium text-white bg-neutral-900 rounded-lg hover:bg-neutral-800 transition-colors"
+                >
+                    Confirm
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Transfer Ownership Confirmation Modal -->
 <div id="transferOwnershipModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-[60] flex items-center justify-center p-4 hidden">
     <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl">
@@ -1111,10 +1280,10 @@ foreach ($boardMembers as $member) {
             <div class="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-amber-100 dark:bg-amber-900/30">
                 <i class="fas fa-crown text-amber-600 dark:text-amber-400 text-xl"></i>
             </div>
-            <h3 class="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Transfer Admin Role?</h3>
+            <h3 class="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2">Transfer Super Admin Role?</h3>
             <p class="text-sm text-center text-gray-500 dark:text-gray-400 mb-6">
-                Are you sure you want to transfer admin role to <strong id="transferOwnerName" class="text-gray-900 dark:text-white"></strong>? 
-                You will become a regular member and lose admin privileges.
+                Are you sure you want to transfer the Super Admin role to <strong id="transferOwnerName" class="text-gray-900 dark:text-white"></strong>? 
+                You will become an Admin and lose Super Admin privileges.
             </p>
             <input type="hidden" id="transferOwnerUserId" value="">
             <div class="flex gap-3">
@@ -1237,6 +1406,7 @@ foreach ($boardMembers as $member) {
     </div>
 </div>
 
+<?php if ($canShare): ?>
 <!-- Share Board Modal -->
 <div id="shareModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4 hidden" x-data="shareModalData()">
     <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg shadow-xl overflow-hidden" @click.away="closeShareModal()">
@@ -1269,13 +1439,15 @@ foreach ($boardMembers as $member) {
                     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
                     Manage Links
                 </button>
+                <?php if ($canReviewRequests): ?>
                 <button 
                     @click="activeTab = 'requests'; loadJoinRequests()"
                     :class="activeTab === 'requests' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
                     class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
-                    Requests
+                    Request Access
                     <span x-show="pendingRequests > 0" x-text="pendingRequests" class="ml-1 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full"></span>
                 </button>
+                <?php endif; ?>
             </div>
             
             <!-- Create Link Tab -->
@@ -1289,13 +1461,13 @@ foreach ($boardMembers as $member) {
                         </div>
                         <p class="text-xs text-green-600 dark:text-green-400 mb-3">This link will only be shown once. Copy it now!</p>
                         <div class="flex gap-2">
-                            <input type="text" :value="generatedLink" readonly 
-                                   class="flex-1 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg">
-                            <button @click="copyLink()" 
+                            <input type="text" x-ref="shareLinkInput" :value="generatedLink" readonly
+                                   class="flex-1 min-w-0 px-3 py-2 text-sm bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg">
+                            <button type="button" @click="copyLink()"
                                     class="px-3 py-2 text-sm font-medium text-white rounded-lg transition"
-                                    style="background-color: #4F46E5;"
-                                    onmouseover="this.style.backgroundColor='#4338CA'"
-                                    onmouseout="this.style.backgroundColor='#4F46E5'">
+                                    style="background-color: #171717;"
+                                    onmouseover="this.style.backgroundColor='#404040'"
+                                    onmouseout="this.style.backgroundColor='#171717'">
                                 <i class="fas mr-1" :class="copied ? 'fa-check' : 'fa-copy'"></i>
                                 <span x-text="copied ? 'Copied!' : 'Copy'"></span>
                             </button>
@@ -1321,14 +1493,6 @@ foreach ($boardMembers as $member) {
                                 </div>
                             </label>
                             <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
-                                   :class="accessType === 'view_only' && 'border-primary bg-primary/5'">
-                                <input type="radio" x-model="accessType" value="view_only" class="mt-0.5 text-primary focus:ring-primary">
-                                <div class="ml-3">
-                                    <span class="text-sm font-medium text-gray-900 dark:text-white">View only</span>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Users can view but not modify the board</p>
-                                </div>
-                            </label>
-                            <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
                                    :class="accessType === 'invite_only' && 'border-primary bg-primary/5'">
                                 <input type="radio" x-model="accessType" value="invite_only" class="mt-0.5 text-primary focus:ring-primary">
                                 <div class="ml-3">
@@ -1343,9 +1507,8 @@ foreach ($boardMembers as $member) {
                     <div class="mb-5">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role when joining</label>
                         <select x-model="roleOnJoin" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
-                            <option value="viewer">Viewer — Can view only</option>
-                            <option value="commenter">Commenter — Can view and comment</option>
                             <option value="member">Member — Can edit tasks and lists</option>
+                            <option value="admin">Admin — Can manage members and board settings</option>
                         </select>
                     </div>
                     
@@ -1392,10 +1555,10 @@ foreach ($boardMembers as $member) {
                     </div>
                     
                     <!-- Info Notice -->
-                    <div class="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-5">
+                    <div class="bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 mb-5">
                         <div class="flex items-start">
-                            <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
-                            <p class="text-xs text-blue-800 dark:text-blue-200">
+                            <i class="fas fa-info-circle text-neutral-500 mt-0.5 mr-2"></i>
+                            <p class="text-xs text-neutral-700 dark:text-neutral-200">
                                 Anyone with this link must sign in to Planify before they can access the board.
                             </p>
                         </div>
@@ -1412,9 +1575,9 @@ foreach ($boardMembers as $member) {
                     <!-- Generate Button -->
                     <button @click="generateLink()" :disabled="loading"
                             class="w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
-                            style="background-color: #4F46E5;"
-                            onmouseover="if(!this.disabled) this.style.backgroundColor='#4338CA'"
-                            onmouseout="this.style.backgroundColor='#4F46E5'">
+                            style="background-color: #171717;"
+                            onmouseover="if(!this.disabled) this.style.backgroundColor='#404040'"
+                            onmouseout="this.style.backgroundColor='#171717'">
                         <span x-show="!loading"><i class="fas fa-link mr-2"></i>Generate Link</span>
                         <span x-show="loading" class="flex items-center">
                             <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -1469,7 +1632,7 @@ foreach ($boardMembers as $member) {
                             </div>
                             <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
                                 <p><span class="font-medium">Type:</span> <span x-text="formatAccessType(link.access_type)"></span></p>
-                                <p><span class="font-medium">Role:</span> <span x-text="link.role_on_join.charAt(0).toUpperCase() + link.role_on_join.slice(1)"></span></p>
+                                <p><span class="font-medium">Role:</span> <span x-text="({admin:'Admin', member:'Member'})[link.role_on_join] || 'Member'"></span></p>
                                 <p><span class="font-medium">Uses:</span> <span x-text="link.uses + (link.max_uses ? '/' + link.max_uses : '')"></span></p>
                                 <p x-show="link.expires_at"><span class="font-medium">Expires:</span> <span x-text="formatDate(link.expires_at)"></span></p>
                                 <p class="text-xs text-gray-400">Created <span x-text="formatDate(link.created_at)"></span></p>
@@ -1479,7 +1642,8 @@ foreach ($boardMembers as $member) {
                 </div>
             </div>
             
-            <!-- Join Requests Tab -->
+            <!-- Access Requests Tab -->
+            <?php if ($canReviewRequests): ?>
             <div x-show="activeTab === 'requests'" x-cloak>
                 <div x-show="loadingRequests" class="text-center py-8">
                     <svg class="animate-spin h-8 w-8 text-primary mx-auto" fill="none" viewBox="0 0 24 24">
@@ -1489,14 +1653,18 @@ foreach ($boardMembers as $member) {
                     <p class="text-sm text-gray-500 mt-2">Loading requests...</p>
                 </div>
                 
-                <div x-show="!loadingRequests && joinRequests.length === 0" class="text-center py-8">
+                <div x-show="!loadingRequests && requestsError" class="text-center py-8">
+                    <p class="text-sm text-red-600 dark:text-red-400" x-text="requestsError"></p>
+                </div>
+
+                <div x-show="!loadingRequests && !requestsError && joinRequests.length === 0" class="text-center py-8">
                     <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
                         <i class="fas fa-user-clock text-gray-400"></i>
                     </div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">No pending join requests</p>
+                    <p class="text-sm text-gray-500 dark:text-gray-400">No pending access requests</p>
                 </div>
                 
-                <div x-show="!loadingRequests && joinRequests.length > 0" class="space-y-3 max-h-80 overflow-y-auto">
+                <div x-show="!loadingRequests && !requestsError && joinRequests.length > 0" class="space-y-3 max-h-80 overflow-y-auto">
                     <template x-for="request in joinRequests" :key="request.id">
                         <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
                             <div class="flex items-center gap-3 mb-3">
@@ -1508,6 +1676,7 @@ foreach ($boardMembers as $member) {
                                     <p class="text-xs text-gray-500" x-text="request.user_email"></p>
                                 </div>
                             </div>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 mb-1">Requested to join as <span class="font-medium" x-text="request.role_label || 'Member'"></span></p>
                             <p class="text-xs text-gray-400 mb-3">Requested <span x-text="formatDate(request.created_at)"></span></p>
                             <div class="flex gap-2">
                                 <button @click="handleRequest(request.id, 'approve')" 
@@ -1523,12 +1692,15 @@ foreach ($boardMembers as $member) {
                     </template>
                 </div>
             </div>
+            <?php endif; ?>
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
 const boardId = <?php echo $boardId; ?>;
+const canReviewRequests = <?php echo $canReviewRequests ? 'true' : 'false'; ?>;
 const canEdit = <?php echo $canEdit ? 'true' : 'false'; ?>;
 
 // Share Modal Data and Functions
@@ -1536,7 +1708,7 @@ function shareModalData() {
     return {
         activeTab: 'create',
         accessType: 'join_on_click',
-        roleOnJoin: 'viewer',
+        roleOnJoin: 'member',
         expiresIn: 'never',
         maxUses: '',
         restrictDomain: '',
@@ -1550,11 +1722,12 @@ function shareModalData() {
         loadingLinks: false,
         joinRequests: [],
         loadingRequests: false,
-        pendingRequests: 0,
+        requestsError: '',
+        pendingRequests: <?php echo (int) $pendingRequestsCount; ?>,
         
         resetForm() {
             this.accessType = 'join_on_click';
-            this.roleOnJoin = 'viewer';
+            this.roleOnJoin = 'member';
             this.expiresIn = 'never';
             this.maxUses = '';
             this.restrictDomain = '';
@@ -1605,12 +1778,43 @@ function shareModalData() {
         },
         
         async copyLink() {
-            try {
-                await navigator.clipboard.writeText(this.generatedLink);
+            const text = this.generatedLink || '';
+            if (!text) {
+                return;
+            }
+
+            let copied = false;
+            if (navigator.clipboard && window.isSecureContext) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    copied = true;
+                } catch (err) {
+                    copied = false;
+                }
+            }
+
+            if (!copied) {
+                const input = this.$refs.shareLinkInput;
+                if (input) {
+                    input.focus();
+                    input.select();
+                    input.setSelectionRange(0, text.length);
+                }
+                try {
+                    copied = document.execCommand('copy');
+                } catch (err) {
+                    copied = false;
+                }
+            }
+
+            if (copied) {
                 this.copied = true;
-                setTimeout(() => this.copied = false, 2000);
-            } catch (err) {
-                console.error('Failed to copy:', err);
+                setTimeout(() => { this.copied = false; }, 2000);
+                if (typeof showToast === 'function') {
+                    showToast('Link copied', 'success');
+                }
+            } else if (typeof showToast === 'function') {
+                showToast('Select the link and copy it manually', 'error');
             }
         },
         
@@ -1663,20 +1867,26 @@ function shareModalData() {
         },
         
         async loadJoinRequests() {
+            if (!canReviewRequests) {
+                return;
+            }
             this.loadingRequests = true;
+            this.requestsError = '';
             
             try {
-                const response = await fetch(`${window.BASE_PATH}/actions/share/requests.php?board_id=${boardId}`);
+                const response = await fetch(`${window.BASE_PATH || ''}/actions/share/requests.php?board_id=${boardId}`);
                 const data = await response.json();
                 
                 if (data.success) {
-                    this.joinRequests = data.requests;
-                    this.pendingRequests = data.count;
-                    // Update the badge on the Share button
-                    updatePendingRequestsBadge(data.count);
+                    this.joinRequests = data.requests || [];
+                    this.pendingRequests = data.count || this.joinRequests.length;
+                    updatePendingRequestsBadge(this.pendingRequests);
+                } else {
+                    this.requestsError = data.message || 'Could not load access requests';
                 }
             } catch (err) {
                 console.error('Error loading join requests:', err);
+                this.requestsError = 'Could not load access requests';
             } finally {
                 this.loadingRequests = false;
             }
@@ -1758,17 +1968,40 @@ function updatePendingRequestsBadge(count) {
 }
 
 // Show Share Modal
-function showShareModal() {
-    if (window.DEBUG_MODE) console.log('showShareModal called');
-    document.getElementById('shareModal').classList.remove('hidden');
-    document.body.style.overflow = 'hidden';
-    
-    // Load pending requests count when modal opens
+function shareModalState() {
     const shareModalEl = document.getElementById('shareModal');
-    if (shareModalEl && shareModalEl.__x) {
-        shareModalEl.__x.$data.loadJoinRequests();
+    if (!shareModalEl || !window.Alpine || typeof Alpine.$data !== 'function') {
+        return null;
+    }
+    return Alpine.$data(shareModalEl);
+}
+
+function showShareModal(tab) {
+    const shareModalEl = document.getElementById('shareModal');
+    if (!shareModalEl) {
+        return;
+    }
+    shareModalEl.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+
+    const data = shareModalState();
+    if (!data) {
+        return;
+    }
+    if (tab === 'requests' && canReviewRequests) {
+        data.activeTab = 'requests';
+    }
+    if (typeof data.loadJoinRequests === 'function') {
+        data.loadJoinRequests();
     }
 }
+
+window.refreshJoinRequests = function () {
+    const data = shareModalState();
+    if (data && typeof data.loadJoinRequests === 'function') {
+        data.loadJoinRequests();
+    }
+};
 
 // Close Share Modal
 function closeShareModal() {
@@ -1777,6 +2010,22 @@ function closeShareModal() {
 }
 
 // Attach Share button click handler
+function openPendingRequests() {
+    if (!canReviewRequests) {
+        return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('open') === 'requests') {
+        showShareModal('requests');
+        return;
+    }
+    if (typeof window.refreshJoinRequests === 'function') {
+        window.refreshJoinRequests();
+    }
+}
+document.addEventListener('DOMContentLoaded', openPendingRequests);
+document.addEventListener('alpine:initialized', openPendingRequests);
+
 document.addEventListener('DOMContentLoaded', function() {
     const shareButton = document.getElementById('shareButton');
     if (shareButton) {
@@ -2337,6 +2586,75 @@ async function updateBoardMembersDisplay() {
     }
 }
 
+function showRoleChangeConfirm(userId, userName, role) {
+    const promoting = role === 'admin';
+    const nextLabel = promoting ? 'Admin' : 'Member';
+    document.getElementById('roleChangeUserId').value = userId;
+    document.getElementById('roleChangeRole').value = role;
+    document.getElementById('roleChangeName').textContent = userName;
+    document.getElementById('roleChangeTitle').textContent = (promoting ? 'Promote to ' : 'Demote to ') + nextLabel + '?';
+    document.getElementById('roleChangeDetail').textContent = promoting
+        ? ' will become an Admin and can manage members and sharing.'
+        : ' will become a Member. They can still work on tasks, but cannot manage members.';
+    const icon = document.getElementById('roleChangeIcon');
+    icon.className = promoting
+        ? 'flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-neutral-100 dark:bg-neutral-700'
+        : 'flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full bg-neutral-100 dark:bg-neutral-700';
+    icon.innerHTML = promoting
+        ? '<i class="fas fa-user-shield text-neutral-800 dark:text-neutral-100 text-xl"></i>'
+        : '<i class="fas fa-user text-neutral-800 dark:text-neutral-100 text-xl"></i>';
+    const btn = document.getElementById('roleChangeBtn');
+    btn.disabled = false;
+    btn.textContent = promoting ? 'Promote' : 'Demote';
+    document.getElementById('roleChangeModal').classList.remove('hidden');
+}
+
+function hideRoleChangeModal() {
+    document.getElementById('roleChangeModal')?.classList.add('hidden');
+}
+
+function updateMemberRole(userId, userName, role) {
+    showRoleChangeConfirm(userId, userName, role);
+}
+
+async function confirmMemberRole() {
+    const userId = document.getElementById('roleChangeUserId').value;
+    const role = document.getElementById('roleChangeRole').value;
+    const userName = document.getElementById('roleChangeName').textContent;
+    const nextLabel = role === 'admin' ? 'Admin' : 'Member';
+    const btn = document.getElementById('roleChangeBtn');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const response = await fetch(window.BASE_PATH + '/actions/board/update-role.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({
+                board_id: boardId,
+                user_id: parseInt(userId, 10),
+                role: role,
+                _token: csrfToken
+            })
+        });
+        const data = await response.json();
+        if (!data.success) {
+            throw new Error(data.message || 'Could not update the role');
+        }
+        showToast(data.message || (userName + ' is now ' + nextLabel), 'success');
+        hideRoleChangeModal();
+        window.location.reload();
+    } catch (error) {
+        showToast(error.message || 'Could not update the role', 'error');
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+}
+
 async function removeMember() {
     const userId = document.getElementById('removeMemberUserId').value;
     const btn = document.getElementById('removeMemberBtn');
@@ -2391,6 +2709,12 @@ document.getElementById('removeMemberModal')?.addEventListener('click', function
     }
 });
 
+document.getElementById('roleChangeModal')?.addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideRoleChangeModal();
+    }
+});
+
 // =====================================================
 // TRANSFER OWNERSHIP FUNCTIONALITY
 // =====================================================
@@ -2430,7 +2754,7 @@ async function transferOwnership() {
         const data = await response.json();
         
         if (data.success) {
-            showToast(data.message || 'Admin role transferred successfully', 'success');
+            showToast(data.message || 'Super Admin role transferred successfully', 'success');
             hideTransferOwnershipModal();
             // Update UI without full page reload - refresh critical sections
             updateBoardMembersDisplay();
@@ -2438,14 +2762,14 @@ async function transferOwnership() {
             const roleBadge = document.querySelector('.board-role-badge');
             if (roleBadge) {
                 roleBadge.textContent = 'Admin';
-                roleBadge.className = 'board-role-badge px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400';
+                roleBadge.className = 'board-role-badge px-2 py-1 text-xs font-medium rounded-full bg-neutral-200 text-neutral-800 dark:bg-neutral-700 dark:text-neutral-100';
             }
         } else {
-            throw new Error(data.message || 'Failed to transfer admin role');
+            throw new Error(data.message || 'Failed to transfer Super Admin role');
         }
     } catch (error) {
         console.error('Error transferring ownership:', error);
-        showToast(error.message || 'Failed to transfer admin role', 'error');
+        showToast(error.message || 'Failed to transfer Super Admin role', 'error');
         btn.disabled = false;
         btn.innerHTML = originalText;
     }
@@ -2479,6 +2803,12 @@ function closeActivityModal() {
 
 // Current board ID for mention system and other features
 window.currentBoardId = <?php echo json_encode($boardId); ?>;
+window.PLANIFY_BOARD_REF = <?php echo json_encode(encryptId((int) $boardId)); ?>;
+window.boardCanEdit = <?php echo !empty($canEdit) ? 'true' : 'false'; ?>;
+window.PLANIFY_DEEP_LINK = <?php echo json_encode([
+    'cardId' => $deepLinkCardId,
+    'listId' => $deepLinkListId,
+], JSON_UNESCAPED_UNICODE); ?>;
 
 // Update card mentions display after posting a comment with mentions
 window.updateCardMentions = async function(cardId) {
@@ -2623,13 +2953,15 @@ window.toggleCardComplete = async function(cardId) {
 };
 
 // Update card assignees display after assigning/removing members
-window.updateCardAssignees = async function(cardId) {
+window.updateCardAssignees = async function(cardId, assignees) {
     try {
-        const response = await fetch(`${window.BASE_PATH}/actions/card/assignees.php?card_id=${cardId}`);
-        const data = await response.json();
-        
-        if (data.success && data.assignees) {
-            const assignees = data.assignees;
+        if (!assignees) {
+            const response = await fetch(`${window.BASE_PATH}/actions/card/assignees.php?card_id=${cardId}`);
+            const data = await response.json();
+            if (!data.success || !data.assignees) return;
+            assignees = data.assignees;
+        }
+        {
             let container = document.getElementById(`card-assignees-${cardId}`);
             
             if (assignees.length > 0) {
@@ -2713,125 +3045,127 @@ window.isDragging = false;
 // User permission - set from PHP
 window.userCanEdit = <?php echo json_encode($canEdit); ?>;
 
-// Initialize drag and drop for cards
+const cardSortables = [];
+
+function clearDropHighlights() {
+    document.querySelectorAll('.list-drop-active').forEach(el => el.classList.remove('list-drop-active'));
+}
+
+function markDropList(listEl) {
+    clearDropHighlights();
+    const column = listEl && listEl.closest('.group\\/list');
+    if (column) column.classList.add('list-drop-active');
+}
+
+// Initialize drag and drop for cards. Safe to call again after live sync.
 function initDragAndDrop() {
-    // Get all list containers (only the card containers, not menus)
+    cardSortables.forEach(sortable => sortable.destroy());
+    cardSortables.length = 0;
+
     const listContainers = document.querySelectorAll('[id^="list-"]:not([id*="menu"])');
-    
     if (listContainers.length === 0) {
-        console.warn('No list containers found for drag and drop');
         return;
     }
-    
-    console.log('Initializing drag and drop for', listContainers.length, 'lists');
-    
+
     listContainers.forEach(container => {
         const listId = container.getAttribute('data-list-id');
-        
         if (!listId) {
-            console.warn('List container missing data-list-id:', container.id);
             return;
         }
-        
-        // Initialize Sortable on each list container
-        new Sortable(container, {
-            group: 'cards', // Allow cards to be dragged between lists
-            animation: 200,
-            easing: 'cubic-bezier(0.25, 1, 0.5, 1)',
+
+        const sortable = new Sortable(container, {
+            group: 'cards',
+            animation: 180,
+            easing: 'cubic-bezier(0.2, 0, 0, 1)',
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
             dragClass: 'sortable-drag',
-            draggable: '[data-card-id]', // Only card elements are draggable
-            filter: '.card-action-btn', // Only filter action buttons
-            preventOnFilter: true, // Prevent drag on filtered elements but allow their click
-            forceFallback: true, // Use fallback for card to follow cursor smoothly
+            draggable: '[data-card-id]',
+            filter: '.card-action-btn, button, a, input, textarea',
+            preventOnFilter: true,
+            forceFallback: true,
             fallbackClass: 'sortable-fallback',
-            fallbackOnBody: true, // Append dragged element to body for smooth movement
-            fallbackTolerance: 0, // Start drag immediately
-            swapThreshold: 0.65,
-            delay: 50, // Minimal delay for quick response
+            fallbackOnBody: true,
+            fallbackTolerance: 3,
+            swapThreshold: 0.6,
+            invertSwap: true,
+            emptyInsertThreshold: 48,
+            delay: 0,
             delayOnTouchOnly: true,
-            touchStartThreshold: 3, // Pixels to move before drag starts on touch
-            
-            // When drag starts
+            touchStartThreshold: 4,
+
             onStart: function(evt) {
-                console.log('Drag started:', evt.item.dataset.cardId);
                 window.isDragging = true;
                 document.body.classList.add('dragging');
-                // Store the original list ID on the item for permission check
                 evt.item.dataset.originalListId = evt.from.dataset.listId;
-                // Add visual feedback to original card position
-                evt.item.style.opacity = '0.5';
+                markDropList(evt.from);
             },
-            
-            // When drag ends (item dropped)
-            onEnd: function(evt) {
-                console.log('Drag ended');
-                // Delay resetting isDragging to prevent click from firing
-                setTimeout(() => { window.isDragging = false; }, 100);
-                document.body.classList.remove('dragging');
-                // Reset card opacity
-                evt.item.style.opacity = '';
-                evt.item.style.transform = '';
-                // Clean up the stored original list ID
-                delete evt.item.dataset.originalListId;
-                
-                const cardId = evt.item.dataset.cardId;
-                const newListId = evt.to.dataset.listId;
-                const oldListId = evt.from.dataset.listId;
-                const newPosition = evt.newIndex;
-                const oldPosition = evt.oldIndex;
-                
-                // Check if card was actually moved to a different list
-                const movedToNewList = (oldListId !== newListId);
-                
-                // Only update if position or list changed
-                if (movedToNewList || newPosition !== oldPosition) {
-                    console.log('Task moved:', {
-                        cardId: cardId,
-                        oldListId: oldListId,
-                        newListId: newListId,
-                        oldPosition: oldPosition,
-                        newPosition: newPosition,
-                        movedToNewList: movedToNewList
-                    });
-                    
-                    // Send update to server (only show toast if moved to new list)
-                    updateCardPosition(cardId, newListId, oldListId, newPosition, movedToNewList);
-                } else {
-                    console.log('Task dropped in same position, no update needed');
-                }
-            },
-            
-            // When dragging over a list - BLOCK cross-list moves for viewers
+
             onMove: function(evt) {
                 const fromListId = evt.from.dataset.listId;
                 const toListId = evt.to.dataset.listId;
-                
-                // If user is a viewer and trying to move to a different list, block it
+
                 if (!window.userCanEdit && fromListId !== toListId) {
-                    // Show toast only once (not on every move event)
                     if (!window._viewerMoveWarningShown) {
                         window._viewerMoveWarningShown = true;
                         if (window.showToast) {
                             window.showToast('You cannot move tasks', 'error');
                         }
-                        // Reset the flag after a delay
                         setTimeout(() => { window._viewerMoveWarningShown = false; }, 2000);
                     }
-                    return false; // Block the move
+                    return false;
                 }
-                
-                return true; // Allow the move
+
+                markDropList(evt.to);
+                return true;
+            },
+
+            onEnd: function(evt) {
+                clearDropHighlights();
+                document.body.classList.remove('dragging');
+                evt.item.style.opacity = '';
+                evt.item.style.transform = '';
+                delete evt.item.dataset.originalListId;
+
+                const cardId = evt.item.dataset.cardId;
+                const newListId = evt.to.dataset.listId;
+                const oldListId = evt.from.dataset.listId;
+                const newPosition = evt.newIndex;
+                const oldPosition = evt.oldIndex;
+                const movedToNewList = oldListId !== newListId;
+                const item = evt.item;
+                const from = evt.from;
+
+                const revert = () => {
+                    const siblings = Array.from(from.querySelectorAll(':scope > [data-card-id]')).filter(el => el !== item);
+                    from.insertBefore(item, siblings[oldPosition] || null);
+                };
+
+                if (movedToNewList || newPosition !== oldPosition) {
+                    updateCardPosition(cardId, newListId, oldListId, newPosition, revert);
+                }
+
+                if (typeof window.syncListAddTaskPrompt === 'function') {
+                    window.syncListAddTaskPrompt(oldListId);
+                    window.syncListAddTaskPrompt(newListId);
+                }
+
+                setTimeout(() => {
+                    window.isDragging = false;
+                    document.dispatchEvent(new CustomEvent('planify:dragend'));
+                }, 80);
             }
         });
-        
-        console.log('Sortable initialized for list:', listId);
+
+        cardSortables.push(sortable);
     });
 }
 
+window.initDragAndDrop = initDragAndDrop;
+window.initSortable = initDragAndDrop;
+
 // Update card position on the server
-function updateCardPosition(cardId, newListId, oldListId, newPosition, movedToNewList) {
+function updateCardPosition(cardId, newListId, oldListId, newPosition, revert) {
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     const formData = new FormData();
     formData.append('card_id', cardId);
@@ -2839,8 +3173,12 @@ function updateCardPosition(cardId, newListId, oldListId, newPosition, movedToNe
     formData.append('old_list_id', oldListId);
     formData.append('position', newPosition);
     formData.append('_token', csrfToken);
-    
-    fetch(window.BASE_PATH + '/actions/card/reorder.php', {
+
+    const request = window.PlanifyRealtime && window.PlanifyRealtime._fetch
+        ? window.PlanifyRealtime._fetch
+        : window.fetch;
+
+    request(window.BASE_PATH + '/actions/card/reorder.php', {
         method: 'POST',
         headers: {
             'X-CSRF-TOKEN': csrfToken
@@ -2850,29 +3188,17 @@ function updateCardPosition(cardId, newListId, oldListId, newPosition, movedToNe
     })
     .then(async response => {
         const data = await response.json();
-        if (!response.ok) {
+        if (!response.ok || !data.success) {
             throw new Error(data.message || 'Failed to update task position');
         }
         return data;
     })
-    .then(data => {
-        if (data.success) {
-            // Show success message ONLY when task is moved to a different list
-            if (movedToNewList) {
-                if (window.showToast) {
-                    window.showToast('Task moved successfully!', 'success');
-                }
-            }
-            console.log('Task position updated successfully');
-        } else {
-            throw new Error(data.message || 'Failed to update task position');
-        }
-    })
     .catch(error => {
-        console.error('Error updating task position:', error);
+        if (typeof revert === 'function') {
+            revert();
+        }
         if (window.showToast) {
-            window.showToast('Failed to move task', 'error');
-            // Revert the card to its original position (the DOM already has the old state since we haven't modified it on failure)
+            window.showToast(error.message || 'Could not move the task. It was put back.', 'error');
         }
     });
 }
@@ -3422,10 +3748,10 @@ document.addEventListener('keydown', (e) => {
             </div>
             
             <!-- Export Info -->
-            <div class="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div class="mb-6 p-3 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-lg">
                 <div class="flex items-start">
-                    <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
-                    <div class="text-sm text-blue-700 dark:text-blue-300">
+                    <i class="fas fa-info-circle text-neutral-500 mt-0.5 mr-2"></i>
+                    <div class="text-sm text-neutral-700 dark:text-neutral-300">
                         <p class="font-medium mb-1">Export includes:</p>
                         <ul class="text-xs space-y-0.5 list-disc list-inside">
                             <li>All tasks from this board</li>
@@ -3569,10 +3895,10 @@ document.addEventListener('keydown', (e) => {
             </div>
             
             <!-- Import Info -->
-            <div class="mb-6 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+            <div class="mb-6 p-3 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-lg">
                 <div class="flex items-start">
-                    <i class="fas fa-info-circle text-blue-500 mt-0.5 mr-2"></i>
-                    <div class="text-sm text-blue-700 dark:text-blue-300">
+                    <i class="fas fa-info-circle text-neutral-500 mt-0.5 mr-2"></i>
+                    <div class="text-sm text-neutral-700 dark:text-neutral-300">
                         <p class="font-medium mb-1">Import Guidelines:</p>
                         <ul class="text-xs space-y-0.5 list-disc list-inside">
                             <li>Do not modify column headers</li>
@@ -3641,11 +3967,11 @@ document.addEventListener('keydown', (e) => {
             </div>
             
             <!-- Created Lists -->
-            <div id="importCreatedLists" class="hidden mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                <p class="text-sm font-medium text-blue-700 dark:text-blue-300 mb-2">
+            <div id="importCreatedLists" class="hidden mb-4 p-3 bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-lg">
+                <p class="text-sm font-medium text-neutral-700 dark:text-neutral-300 mb-2">
                     <i class="fas fa-list mr-1"></i> New Lists Created:
                 </p>
-                <div id="importCreatedListsContent" class="text-xs text-blue-600 dark:text-blue-400"></div>
+                <div id="importCreatedListsContent" class="text-xs text-neutral-600 dark:text-neutral-400"></div>
             </div>
             
             <!-- Created Labels -->
@@ -3797,7 +4123,7 @@ document.addEventListener('keydown', (e) => {
             <input type="file" id="chatImageInput" accept="image/*" class="hidden" onchange="handleChatImageSelect(event)" multiple>
             <button 
                 onclick="document.getElementById('chatImageInput').click()"
-                class="p-2.5 text-gray-500 hover:text-blue-500 dark:text-gray-400 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-all duration-200 flex-shrink-0"
+                class="p-2.5 text-gray-500 hover:text-neutral-900 dark:text-gray-400 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-all duration-200 flex-shrink-0"
                 title="Upload images (up to 5)"
             >
                 <i class="fas fa-image text-lg"></i>
@@ -3865,9 +4191,11 @@ document.addEventListener('keydown', (e) => {
 </div>
 
 <style>
-    /* Prevent unnecessary scrollbar */
-    html, body {
-        overflow-x: hidden;
+    /* Page stays put. Lists scroll sideways inside #boardLists; columns scroll vertically inside cards area. */
+    html.board-viewport-lock,
+    html.board-viewport-lock body {
+        overflow: hidden !important;
+        max-width: 100%;
     }
     
     /* Chatbot Panel - ensure full height */

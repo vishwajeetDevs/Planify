@@ -50,8 +50,8 @@ unset($_SESSION['error']);
                 },
                 extend: {
                     colors: {
-                        primary: '#4F46E5',
-                        secondary: '#3B82F6'
+                        primary: '#171717',
+                        secondary: '#525252'
                     },
                     animation: {
                         'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
@@ -147,10 +147,10 @@ unset($_SESSION['error']);
     
     <!-- Floating background elements -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-32 h-32 bg-indigo-200/30 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
-        <div class="absolute top-40 right-20 w-24 h-24 bg-blue-200/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
+        <div class="absolute top-20 left-10 w-32 h-32 bg-neutral-300/40 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
+        <div class="absolute top-40 right-20 w-24 h-24 bg-neutral-300/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
         <div class="absolute bottom-20 left-1/4 w-40 h-40 bg-purple-200/30 rounded-full blur-xl animate-float" style="animation-delay: 4s;"></div>
-        <div class="absolute bottom-40 right-10 w-28 h-28 bg-indigo-300/20 rounded-full blur-xl animate-float" style="animation-delay: 1s;"></div>
+        <div class="absolute bottom-40 right-10 w-28 h-28 bg-neutral-400/25 rounded-full blur-xl animate-float" style="animation-delay: 1s;"></div>
     </div>
     
     <div class="max-w-md w-full mx-4 relative z-10">
@@ -212,13 +212,13 @@ unset($_SESSION['error']);
                         <input type="checkbox" name="remember" class="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 transition-transform duration-200 group-hover:scale-110">
                         <span class="ml-2 text-sm text-gray-600 group-hover:text-gray-900 transition-colors">Remember me</span>
                     </label>
-                    <a href="forgot-password.php" class="text-sm text-primary hover:text-indigo-700 hover:underline transition-colors">Forgot password?</a>
+                    <a href="forgot-password.php" class="text-sm text-primary hover:text-neutral-800 hover:underline transition-colors">Forgot password?</a>
                 </div>
                 
                 <!-- Submit Button -->
                 <button 
                     type="submit" 
-                    class="btn-primary w-full bg-gradient-to-r from-primary to-indigo-600 text-white py-3.5 rounded-xl font-semibold hover:from-indigo-600 hover:to-primary transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] animate-fade-in-up"
+                    class="btn-primary w-full bg-neutral-900 text-white py-3.5 rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98] animate-fade-in-up"
                     style="animation-delay: 0.5s;"
                 >
                     <span class="flex items-center justify-center">
@@ -232,7 +232,7 @@ unset($_SESSION['error']);
             <div class="mt-6 text-center animate-fade-in" style="animation-delay: 0.6s;">
                 <p class="text-gray-600">
                     Don't have an account? 
-                    <a href="register.php<?php echo $redirect ? '?redirect=' . urlencode($redirect) : ''; ?>" class="text-primary font-semibold hover:text-indigo-700 hover:underline transition-colors">Sign up</a>
+                    <a href="register.php<?php echo $redirect ? '?redirect=' . urlencode($redirect) : ''; ?>" class="text-primary font-semibold hover:text-neutral-800 hover:underline transition-colors">Sign up</a>
                 </p>
             </div>
         </div>

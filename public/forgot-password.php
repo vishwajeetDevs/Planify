@@ -39,8 +39,8 @@ if (isset($_SESSION['user_id'])) {
                 },
                 extend: {
                     colors: {
-                        primary: '#4F46E5',
-                        secondary: '#3B82F6'
+                        primary: '#171717',
+                        secondary: '#525252'
                     },
                     animation: {
                         'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
@@ -104,8 +104,8 @@ if (isset($_SESSION['user_id'])) {
     
     <!-- Floating background elements -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-20 left-10 w-32 h-32 bg-indigo-200/30 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
-        <div class="absolute top-40 right-20 w-24 h-24 bg-blue-200/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
+        <div class="absolute top-20 left-10 w-32 h-32 bg-neutral-300/40 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
+        <div class="absolute top-40 right-20 w-24 h-24 bg-neutral-300/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
         <div class="absolute bottom-20 left-1/4 w-40 h-40 bg-purple-200/30 rounded-full blur-xl animate-float" style="animation-delay: 4s;"></div>
     </div>
     
@@ -122,7 +122,7 @@ if (isset($_SESSION['user_id'])) {
             
             <!-- Icon -->
             <div class="text-center mb-6">
-                <div class="inline-flex items-center justify-center w-16 h-16 bg-indigo-100 rounded-full mb-4">
+                <div class="inline-flex items-center justify-center w-16 h-16 bg-neutral-200 rounded-full mb-4">
                     <i class="fas fa-key text-2xl text-primary"></i>
                 </div>
                 <h2 class="text-2xl font-bold text-gray-900 mb-2">Forgot Password?</h2>
@@ -155,7 +155,7 @@ if (isset($_SESSION['user_id'])) {
                     <button 
                         type="submit" 
                         id="submitBtn"
-                        class="w-full bg-gradient-to-r from-primary to-indigo-600 text-white py-3.5 rounded-xl font-semibold hover:from-indigo-600 hover:to-primary transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                        class="w-full bg-neutral-900 text-white py-3.5 rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                     >
                         <span class="flex items-center justify-center">
                             <i class="fas fa-paper-plane mr-2"></i>
@@ -182,7 +182,7 @@ if (isset($_SESSION['user_id'])) {
             
             <!-- Back to Login Link (for form state) -->
             <div id="backLink" class="mt-6 text-center">
-                <a href="login.php" class="text-primary font-semibold hover:text-indigo-700 hover:underline transition-colors">
+                <a href="login.php" class="text-primary font-semibold hover:text-neutral-800 hover:underline transition-colors">
                     <i class="fas fa-arrow-left mr-1"></i>
                     Back to Login
                 </a>

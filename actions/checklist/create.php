@@ -41,6 +41,18 @@ try {
         exit;
     }
 
+    $stmt = $conn->prepare('SELECT COUNT(*) AS cnt FROM checklists WHERE card_id = ?');
+    $stmt->bind_param('i', $cardId);
+    $stmt->execute();
+    $existing = (int) ($stmt->get_result()->fetch_assoc()['cnt'] ?? 0);
+    if ($existing >= 1) {
+        echo json_encode([
+            'success' => false,
+            'message' => 'This task already has a checklist. Delete it before creating another.',
+        ]);
+        exit;
+    }
+
     $stmt = $conn->prepare("SELECT COALESCE(MAX(position), 0) + 1 as pos FROM checklists WHERE card_id = ?");
     $stmt->bind_param('i', $cardId);
     $stmt->execute();

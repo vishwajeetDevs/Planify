@@ -56,7 +56,7 @@ try {
     if ($membership['role'] === 'owner') {
         jsonResponse([
             'success' => false, 
-            'message' => 'As the board owner, you cannot leave. Please transfer ownership first or delete the board.'
+            'message' => 'As Super Admin, transfer that role before leaving this board.'
         ], 403);
     }
     

@@ -82,6 +82,7 @@ if (isset($_SESSION['error_message'])) {
                     </button>
                 </div>
 
+                <div id="workspaceGrid">
                 <?php if (empty($workspaces)): ?>
                     <div class="text-center py-12 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg transition-all duration-300 hover:border-primary dark:hover:border-primary animate-fade-in">
                         <i class="fas fa-layer-group text-4xl text-gray-400 mb-3 animate-bounce-subtle"></i>
@@ -180,7 +181,7 @@ if (isset($_SESSION['error_message'])) {
                                         </p>
                                     </div>
                                     <div class="mt-4 pt-2 border-t border-gray-100 dark:border-gray-700">
-                                        <span class="text-xs text-gray-400 flex items-center">
+                                        <span class="text-xs text-gray-500 dark:text-gray-300 flex items-center">
                                             <i class="far fa-clock mr-1.5"></i>
                                             Created <?php echo timeAgo($workspace['created_at']); ?>
                                         </span>
@@ -190,6 +191,7 @@ if (isset($_SESSION['error_message'])) {
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
+                </div>
             </div>
         </div>
     </div>
@@ -212,7 +214,7 @@ if (isset($_SESSION['error_message'])) {
                     <div class="mt-4">
                         <label for="workspace-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Workspace Name <span class="text-red-500">*</span></label>
                         <input type="text" id="workspace-name" name="name" required
-                               class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all duration-200 focus:shadow-lg"
+                               class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-neutral-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all duration-200 focus:shadow-lg"
                                placeholder="e.g., Marketing Team">
                     </div>
                     <div class="mt-4">
@@ -220,7 +222,7 @@ if (isset($_SESSION['error_message'])) {
                         <textarea
                             id="workspace-description"
                             name="description"
-                            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all duration-200 focus:shadow-lg resize-none"
+                            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-neutral-500 focus:border-transparent dark:bg-gray-700 dark:text-white transition-all duration-200 focus:shadow-lg resize-none"
                             rows="3"
                             placeholder="What's this workspace about?"></textarea>
                     </div>
@@ -568,7 +570,7 @@ if (isset($_SESSION['error_message'])) {
                         </p>
                     </div>
                     <div class="mt-4 pt-2 border-t border-gray-100 dark:border-gray-700">
-                        <span class="text-xs text-gray-400 flex items-center">
+                        <span class="text-xs text-gray-500 dark:text-gray-300 flex items-center">
                             <i class="far fa-clock mr-1.5"></i>
                             Created 0 min ago
                         </span>

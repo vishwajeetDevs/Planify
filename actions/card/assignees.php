@@ -41,17 +41,13 @@ try {
             exit;
         }
         
-        // Get assignees (with error handling for missing table)
         $assignees = [];
-        $tableCheck = $conn->query("SHOW TABLES LIKE 'card_assignees'");
-        if ($tableCheck && $tableCheck->num_rows > 0) {
-            $stmt = $conn->prepare("SELECT u.id, u.name, u.email, u.avatar, ca.assigned_at FROM card_assignees ca JOIN users u ON ca.user_id = u.id WHERE ca.card_id = ? ORDER BY ca.assigned_at");
-            if ($stmt) {
-                $stmt->bind_param('i', $cardId);
-                $stmt->execute();
-                $assignees = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
-                $stmt->close();
-            }
+        $stmt = $conn->prepare("SELECT u.id, u.name, u.email, u.avatar, ca.assigned_at FROM card_assignees ca JOIN users u ON ca.user_id = u.id WHERE ca.card_id = ? ORDER BY ca.assigned_at");
+        if ($stmt) {
+            $stmt->bind_param('i', $cardId);
+            $stmt->execute();
+            $assignees = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+            $stmt->close();
         }
         
         // Get board members
@@ -149,74 +145,10 @@ try {
                     $stmt->execute();
                     $stmt->close();
                     $resultAction = 'added';
-                    
-                    // Send notification and email to the assigned user (if not self-assigning)
-                    if ($userId !== $_SESSION['user_id']) {
-                        // Create in-app notification
-                        $notificationHelper = new NotificationHelper($conn);
-                        $notificationHelper->createAssignmentNotification($userId, $_SESSION['user_id'], $cardId, $card['board_id']);
-                        
-                        // Send email notification
-                        try {
-                            // Get task details
-                            $taskStmt = $conn->prepare("
-                                SELECT c.title, c.due_date, l.title as list_name, b.name as board_name, b.id as board_id
-                                FROM cards c 
-                                JOIN lists l ON c.list_id = l.id 
-                                JOIN boards b ON l.board_id = b.id 
-                                WHERE c.id = ?
-                            ");
-                            $taskStmt->bind_param('i', $cardId);
-                            $taskStmt->execute();
-                            $taskDetails = $taskStmt->get_result()->fetch_assoc();
-                            $taskStmt->close();
-                            
-                            // Get assigned user details
-                            $userStmt = $conn->prepare("SELECT name, email FROM users WHERE id = ?");
-                            $userStmt->bind_param('i', $userId);
-                            $userStmt->execute();
-                            $assignedUser = $userStmt->get_result()->fetch_assoc();
-                            $userStmt->close();
-                            
-                            // Get assigner (current user) name
-                            $assignerStmt = $conn->prepare("SELECT name FROM users WHERE id = ?");
-                            $assignerStmt->bind_param('i', $_SESSION['user_id']);
-                            $assignerStmt->execute();
-                            $assigner = $assignerStmt->get_result()->fetch_assoc();
-                            $assignerStmt->close();
-                            
-                            if ($taskDetails && $assignedUser && $assigner) {
-                                // Build task URL with encrypted ID
-                                $taskUrl = (defined('APP_URL') ? APP_URL : BASE_URL) . '/board.php?ref=' . encryptId($taskDetails['board_id']) . '&card=' . $cardId;
-                                
-                                // Format due date if exists
-                                $dueDate = '';
-                                if (!empty($taskDetails['due_date'])) {
-                                    $dueDate = date('F j, Y', strtotime($taskDetails['due_date']));
-                                }
-                                
-                                // Send email
-                                MailHelper::sendTaskAssignedEmail(
-                                    $assignedUser['email'],
-                                    $assignedUser['name'],
-                                    $taskDetails['title'],
-                                    $assigner['name'],
-                                    $taskDetails['board_name'],
-                                    $taskDetails['list_name'],
-                                    $taskUrl,
-                                    $dueDate
-                                );
-                            }
-                        } catch (Exception $e) {
-                            // Log error but don't fail the assignment
-                            error_log("Failed to send task assignment email: " . $e->getMessage());
-                        }
-                    }
                 }
             }
         }
         
-        // Get updated assignees
         $assignees = [];
         $stmt = $conn->prepare("SELECT u.id, u.name, u.email, u.avatar, ca.assigned_at FROM card_assignees ca JOIN users u ON ca.user_id = u.id WHERE ca.card_id = ? ORDER BY ca.assigned_at");
         if ($stmt) {
@@ -225,12 +157,87 @@ try {
             $assignees = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
             $stmt->close();
         }
-        
-        echo json_encode(['success' => true, 'action' => $resultAction, 'assignees' => $assignees]);
+
+        $notifyUserId = $userId;
+        $actorId = (int) $_SESSION['user_id'];
+        $boardId = (int) $card['board_id'];
+        $shouldNotify = $resultAction === 'added' && $notifyUserId !== $actorId;
+
+        planify_finish_json([
+            'success' => true,
+            'action' => $resultAction,
+            'assignees' => $assignees
+        ]);
+
+        if ($shouldNotify) {
+            try {
+                $notificationHelper = new NotificationHelper($conn);
+                $notificationHelper->createAssignmentNotification($notifyUserId, $actorId, $cardId, $boardId);
+
+                $taskStmt = $conn->prepare("
+                    SELECT c.title, c.due_date, c.list_id, l.title as list_name, b.name as board_name, b.id as board_id,
+                           assignee.name as assignee_name, assignee.email as assignee_email,
+                           actor.name as actor_name
+                    FROM cards c
+                    JOIN lists l ON c.list_id = l.id
+                    JOIN boards b ON l.board_id = b.id
+                    JOIN users assignee ON assignee.id = ?
+                    JOIN users actor ON actor.id = ?
+                    WHERE c.id = ?
+                ");
+                $taskStmt->bind_param('iii', $notifyUserId, $actorId, $cardId);
+                $taskStmt->execute();
+                $taskDetails = $taskStmt->get_result()->fetch_assoc();
+                $taskStmt->close();
+
+                if ($taskDetails && !empty($taskDetails['assignee_email'])) {
+                    $dueDate = !empty($taskDetails['due_date']) ? date('F j, Y', strtotime($taskDetails['due_date'])) : '';
+                    $taskUrl = taskPageUrl(
+                        (int) $taskDetails['board_id'],
+                        $cardId,
+                        isset($taskDetails['list_id']) ? (int) $taskDetails['list_id'] : null
+                    );
+                    MailHelper::sendTaskAssignedEmail(
+                        $taskDetails['assignee_email'],
+                        $taskDetails['assignee_name'],
+                        $taskDetails['title'],
+                        $taskDetails['actor_name'],
+                        $taskDetails['board_name'],
+                        $taskDetails['list_name'],
+                        $taskUrl,
+                        $dueDate
+                    );
+                }
+            } catch (Exception $e) {
+                error_log("Failed to send task assignment email: " . $e->getMessage());
+            }
+        }
+        exit;
     } else {
         echo json_encode(['success' => false, 'message' => 'Invalid method']);
     }
 
 } catch (Exception $e) {
     echo json_encode(['success' => false, 'message' => 'Server error']);
+}
+
+function planify_finish_json(array $payload): void {
+    $json = json_encode($payload);
+    if ($json === false) {
+        $json = '{"success":false,"message":"Server error"}';
+    }
+    ignore_user_abort(true);
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+    header('Content-Length: ' . strlen($json));
+    header('Connection: close');
+    echo $json;
+    while (ob_get_level() > 0) {
+        ob_end_flush();
+    }
+    flush();
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    }
 }

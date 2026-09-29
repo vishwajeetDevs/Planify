@@ -50,8 +50,8 @@ unset($_SESSION['error']);
                 },
                 extend: {
                     colors: {
-                        primary: '#4F46E5',
-                        secondary: '#3B82F6'
+                        primary: '#171717',
+                        secondary: '#525252'
                     },
                     animation: {
                         'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
@@ -144,10 +144,10 @@ unset($_SESSION['error']);
     
     <!-- Floating background elements -->
     <div class="absolute inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute top-10 left-20 w-32 h-32 bg-indigo-200/30 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
-        <div class="absolute top-60 right-10 w-24 h-24 bg-blue-200/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
+        <div class="absolute top-10 left-20 w-32 h-32 bg-neutral-300/40 rounded-full blur-xl animate-float" style="animation-delay: 0s;"></div>
+        <div class="absolute top-60 right-10 w-24 h-24 bg-neutral-300/30 rounded-full blur-xl animate-float" style="animation-delay: 2s;"></div>
         <div class="absolute bottom-10 left-1/3 w-40 h-40 bg-purple-200/30 rounded-full blur-xl animate-float" style="animation-delay: 4s;"></div>
-        <div class="absolute bottom-60 right-1/4 w-28 h-28 bg-indigo-300/20 rounded-full blur-xl animate-float" style="animation-delay: 1s;"></div>
+        <div class="absolute bottom-60 right-1/4 w-28 h-28 bg-neutral-400/25 rounded-full blur-xl animate-float" style="animation-delay: 1s;"></div>
     </div>
     
     <div class="max-w-md w-full mx-4 relative z-10">
@@ -254,15 +254,15 @@ unset($_SESSION['error']);
                     <label class="flex items-start cursor-pointer group">
                         <input type="checkbox" required class="mt-1 w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 transition-transform duration-200 group-hover:scale-110">
                         <span class="ml-3 text-sm text-gray-600">
-                            I agree to the <a href="#" class="text-primary hover:text-indigo-700 hover:underline transition-colors">Terms of Service</a> 
-                            and <a href="#" class="text-primary hover:text-indigo-700 hover:underline transition-colors">Privacy Policy</a>
+                            I agree to the <a href="#" class="text-primary hover:text-neutral-800 hover:underline transition-colors">Terms of Service</a> 
+                            and <a href="#" class="text-primary hover:text-neutral-800 hover:underline transition-colors">Privacy Policy</a>
                         </span>
                     </label>
                 </div>
                 
                 <!-- Submit Button -->
                 <div class="animate-fade-in-up" style="animation-delay: 0.45s;">
-                    <button type="submit" class="btn-primary w-full bg-gradient-to-r from-primary to-indigo-600 text-white py-3.5 px-4 rounded-xl font-semibold hover:from-indigo-600 hover:to-primary transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98]">
+                    <button type="submit" class="btn-primary w-full bg-neutral-900 text-white py-3.5 px-4 rounded-xl font-semibold hover:bg-neutral-800 transition-all duration-300 transform hover:scale-[1.02] hover:shadow-xl hover:shadow-primary/30 active:scale-[0.98]">
                         <span class="flex items-center justify-center">
                             <i class="fas fa-user-plus mr-2"></i>
                             Create Account
@@ -273,7 +273,7 @@ unset($_SESSION['error']);
                 <!-- Login Link -->
                 <div class="text-center text-sm text-gray-600 animate-fade-in" style="animation-delay: 0.5s;">
                     Already have an account? 
-                    <a href="login.php<?php echo $redirect ? '?redirect=' . urlencode($redirect) : ''; ?>" class="text-primary font-semibold hover:text-indigo-700 hover:underline transition-colors">Sign in</a>
+                    <a href="login.php<?php echo $redirect ? '?redirect=' . urlencode($redirect) : ''; ?>" class="text-primary font-semibold hover:text-neutral-800 hover:underline transition-colors">Sign in</a>
                 </div>
             </form>
         </div>

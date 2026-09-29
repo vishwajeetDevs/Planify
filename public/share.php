@@ -149,8 +149,8 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                 },
                 extend: {
                     colors: {
-                        primary: '#4F46E5',
-                        secondary: '#3B82F6'
+                        primary: '#171717',
+                        secondary: '#525252'
                     }
                 }
             }
@@ -217,7 +217,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                 <?php endif; ?>
                 
                 <div class="space-y-3">
-                    <a href="dashboard.php" class="block w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition">
+                    <a href="dashboard.php" class="block w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition">
                         Go to Dashboard
                     </a>
                     <a href="index.php" class="block w-full px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition">
@@ -264,7 +264,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                 
                 <div class="space-y-3">
                     <a href="login.php?redirect=<?php echo urlencode('share.php?token=' . $token); ?>" 
-                       class="block w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition text-center">
+                       class="block w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition text-center">
                         <i class="fas fa-sign-in-alt mr-2"></i>Sign In to Join
                     </a>
                     <a href="register.php?redirect=<?php echo urlencode('share.php?token=' . $token); ?>" 
@@ -288,7 +288,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                 </h1>
                 
                 <p class="text-gray-600 dark:text-gray-400 mb-2">
-                    You have access to this board as <span class="font-medium"><?php echo ucfirst($existingRole); ?></span>.
+                    You have access to this board as <span class="font-medium"><?php echo e(roleLabel($existingRole)); ?></span>.
                 </p>
                 
                 <div class="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 mb-6">
@@ -297,7 +297,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                 </div>
                 
                 <a href="<?php echo encryptedUrl('board.php', $boardInfo['id']); ?>" 
-                   class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition">
+                   class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition">
                     <i class="fas fa-arrow-right mr-2"></i>Go to Board
                 </a>
             </div>
@@ -324,20 +324,20 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">You've joined the board!</h2>
                     <p class="text-gray-600 dark:text-gray-400 mb-4">You can now view and collaborate on this board.</p>
                     <a href="<?php echo encryptedUrl('board.php', $boardInfo['id']); ?>" 
-                       class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition">
+                       class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition">
                         <i class="fas fa-arrow-right mr-2"></i>Go to Board
                     </a>
                 </div>
                 
                 <!-- Request Sent State -->
                 <div x-show="requestSent" x-cloak class="text-center py-4">
-                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <i class="fas fa-paper-plane text-2xl text-blue-500"></i>
+                    <div class="w-16 h-16 mx-auto mb-4 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center">
+                        <i class="fas fa-paper-plane text-2xl text-neutral-600"></i>
                     </div>
                     <h2 class="text-lg font-semibold text-gray-900 dark:text-white mb-2">Request Sent!</h2>
-                    <p class="text-gray-600 dark:text-gray-400 mb-4">The board owner will review your request. You'll be notified when they respond.</p>
+                    <p class="text-gray-600 dark:text-gray-400 mb-4">A Super Admin or Admin will review your request. You'll be notified when they respond.</p>
                     <a href="dashboard.php" 
-                       class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition">
+                       class="inline-flex items-center px-6 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition">
                         <i class="fas fa-home mr-2"></i>Go to Dashboard
                     </a>
                 </div>
@@ -362,7 +362,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                         <div class="flex items-center justify-between">
                             <span class="text-sm text-gray-600 dark:text-gray-400">You'll join as</span>
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                                <?php echo ucfirst($boardInfo['role_on_join']); ?>
+                                <?php echo e(roleLabel($boardInfo['role_on_join'])); ?>
                             </span>
                         </div>
                     </div>
@@ -380,7 +380,7 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                         <button 
                             @click="requestAccess()"
                             :disabled="joining"
-                            class="w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                            class="w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
                             <span x-show="!joining"><i class="fas fa-paper-plane mr-2"></i>Request Access</span>
                             <span x-show="joining" class="flex items-center">
                                 <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
@@ -391,13 +391,13 @@ $pageTitle = $boardInfo ? 'Join ' . e($boardInfo['name']) . ' - Planify' : 'Shar
                             </span>
                         </button>
                         <p class="text-xs text-center text-gray-500 dark:text-gray-400">
-                            The board owner will need to approve your request.
+                            A Super Admin or Admin will review your request.
                         </p>
                         <?php else: ?>
                         <button 
                             @click="joinBoard()"
                             :disabled="joining"
-                            class="w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
+                            class="w-full px-4 py-2.5 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center">
                             <span x-show="!joining"><i class="fas fa-user-plus mr-2"></i>Join Board</span>
                             <span x-show="joining" class="flex items-center">
                                 <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">

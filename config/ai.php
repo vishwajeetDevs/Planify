@@ -24,7 +24,7 @@ if (!class_exists('Env')) {
 define('AI_ENABLED', env('AI_ENABLED', true));
 define('AI_PROVIDER', env('AI_PROVIDER', 'gemini'));
 define('AI_API_KEY', env('AI_API_KEY', ''));
-define('AI_MODEL', env('AI_MODEL', 'gemini-2.5-flash'));
+define('AI_MODEL', env('AI_MODEL', 'gemini-3.5-flash'));
 
 // Build the full API URL
 $aiApiBaseUrl = env('AI_API_URL', 'https://generativelanguage.googleapis.com/v1beta/models');

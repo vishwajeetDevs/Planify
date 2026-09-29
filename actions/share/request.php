@@ -61,9 +61,8 @@ try {
         jsonResponse(['success' => false, 'message' => 'Request not found or you do not have permission'], 404);
     }
     
-    // Only owner or admin can handle requests
-    if (!in_array($request['handler_role'], ['owner', 'admin'])) {
-        jsonResponse(['success' => false, 'message' => 'Only board owners and admins can handle join requests'], 403);
+    if (!in_array($request['handler_role'], ['owner', 'admin'], true)) {
+        jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can review access requests'], 403);
     }
     
     if ($request['status'] !== 'pending') {
@@ -84,20 +83,33 @@ try {
     $stmt->execute();
     
     if ($action === 'approve') {
-        // Add user as board member only if they're not already a member
-        // This prevents downgrading existing members
-        $role = $request['role_on_join'];
-        $stmt = $conn->prepare("
-            INSERT IGNORE INTO board_members (board_id, user_id, role)
-            VALUES (?, ?, ?)
-        ");
-        $stmt->bind_param("iis", $request['board_id'], $request['user_id'], $role);
+        $role = in_array($request['role_on_join'], ['admin', 'member'], true) ? $request['role_on_join'] : 'member';
+        $stmt = $conn->prepare("SELECT role FROM board_members WHERE board_id = ? AND user_id = ?");
+        $stmt->bind_param("ii", $request['board_id'], $request['user_id']);
         $stmt->execute();
+        $existing = $stmt->get_result()->fetch_assoc();
+
+        if (!$existing) {
+            $stmt = $conn->prepare("
+                INSERT INTO board_members (board_id, user_id, role)
+                VALUES (?, ?, ?)
+            ");
+            $stmt->bind_param("iis", $request['board_id'], $request['user_id'], $role);
+            if (!$stmt->execute()) {
+                throw new Exception('Could not add the member');
+            }
+        } elseif ($existing['role'] === 'member' && $role === 'admin') {
+            $stmt = $conn->prepare("UPDATE board_members SET role = 'admin' WHERE board_id = ? AND user_id = ?");
+            $stmt->bind_param("ii", $request['board_id'], $request['user_id']);
+            if (!$stmt->execute()) {
+                throw new Exception('Could not update the member role');
+            }
+        }
         
         // Add to workspace members if not already
         $stmt = $conn->prepare("
             INSERT IGNORE INTO workspace_members (workspace_id, user_id, role)
-            VALUES (?, ?, 'viewer')
+            VALUES (?, ?, 'member')
         ");
         $stmt->bind_param("ii", $request['workspace_id'], $request['user_id']);
         $stmt->execute();
@@ -115,7 +127,7 @@ try {
             INSERT INTO notifications (user_id, type, title, message, data)
             VALUES (?, 'request_approved', 'Request Approved', ?, ?)
         ");
-        $message = 'Your request to join "' . $request['board_name'] . '" has been approved!';
+        $message = 'Your request to join "' . $request['board_name'] . '" was approved. You joined as ' . roleLabel($role) . '.';
         $stmt->bind_param("iss", $request['user_id'], $message, $notificationData);
         $stmt->execute();
     } else {

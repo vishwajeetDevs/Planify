@@ -558,10 +558,109 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
+/**
+ * Build a board page URL with optional task/list deep-link params.
+ */
+window.planifyBoardUrl = function({ boardRef, boardId, openRef, listRef, cardRef, listId, cardId, open } = {}) {
+    const base = `${window.BASE_PATH || ''}/public/board.php`;
+    const params = new URLSearchParams();
+    if (openRef) {
+        params.set('o', openRef);
+    } else {
+        if (boardRef) {
+            params.set('ref', boardRef);
+        } else if (boardId) {
+            params.set('id', String(boardId));
+        }
+        if (cardRef) {
+            params.set('c', cardRef);
+        } else if (cardId) {
+            params.set('c', String(cardId));
+        }
+        if (listRef) {
+            params.set('l', listRef);
+        } else if (listId) {
+            params.set('l', String(listId));
+        }
+    }
+    if (open) params.set('open', open);
+    const qs = params.toString();
+    return qs ? `${base}?${qs}` : base;
+};
+
+window.planifySyncBoardLocationWithOpen = function(openRef, options) {
+    if (!window.location.pathname.includes('board.php')) return;
+    const opts = options && typeof options === 'object' ? options : {};
+    let next;
+    if (openRef) {
+        next = `${window.location.pathname}?o=${encodeURIComponent(openRef)}`;
+        if (!opts.force && window.currentCardId) {
+            const params = new URLSearchParams(window.location.search);
+            if (params.has('o') || params.has('c') || params.has('card')) {
+                return;
+            }
+        }
+    } else {
+        const ref = window.PLANIFY_BOARD_REF;
+        next = ref
+            ? `${window.location.pathname}?ref=${encodeURIComponent(ref)}`
+            : window.location.pathname;
+    }
+    const current = window.location.pathname + window.location.search;
+    if (current === next) return;
+    window.history.replaceState({}, '', next);
+};
+
+window.planifySyncBoardLocationWithRefs = function(_cardRef, _listRef, openRef) {
+    if (openRef) {
+        window.planifySyncBoardLocationWithOpen(openRef);
+    }
+};
+
+window.planifySyncBoardLocation = function(cardId) {
+    if (!window.location.pathname.includes('board.php')) return;
+    if (!cardId) {
+        window.planifySyncBoardLocationWithOpen(null);
+        return;
+    }
+    const boardId = window.currentBoardId;
+    if (!boardId) return;
+    const q = new URLSearchParams({ board_id: String(boardId), card_id: String(cardId) });
+    fetch(`${window.BASE_PATH || ''}/actions/link/encode-refs.php?${q.toString()}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.success && data.o) {
+                window.planifySyncBoardLocationWithOpen(data.o);
+            }
+        })
+        .catch(() => {});
+};
+
+window.planifyOpenBoardDeepLink = function() {
+    const link = window.PLANIFY_DEEP_LINK;
+    if (!link || (!link.cardId && !link.listId)) return;
+
+    if (link.listId) {
+        const listEl = document.getElementById('list-' + link.listId);
+        if (listEl) {
+            listEl.scrollIntoView({ behavior: 'auto', inline: 'center', block: 'nearest' });
+        }
+    }
+
+    if (link.cardId && typeof window.showCardDetails === 'function') {
+        window.showCardDetails(link.cardId);
+    }
+};
+
 // Function to show card details
 window.showCardDetails = function(cardId) {
     if (!cardId) {
         console.error('No card ID provided');
+        return;
+    }
+
+    if (window.PlanifyRealtime && window.PlanifyRealtime.cardIsGone(cardId)) {
+        if (window.showToast) window.showToast('This task was deleted.', 'error');
         return;
     }
     
@@ -579,7 +678,7 @@ window.showCardDetails = function(cardId) {
     document.getElementById('cardDescription').innerHTML = '<div class="flex justify-center py-4"><div class="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div></div>';
     
     // Load card details
-    loadCardDetails(cardId);
+    loadCardDetails(cardId, { syncUrl: true });
     
     // Animate in
     setTimeout(() => {
@@ -619,6 +718,9 @@ window.closeCardModal = function() {
         }
         
         window.currentCardId = null;
+        if (typeof window.planifySyncBoardLocation === 'function') {
+            window.planifySyncBoardLocation(null);
+        }
     }, 300);
 };
 
@@ -645,6 +747,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 window.closeCardModal();
             }
         });
+    }
+    if (typeof window.planifyOpenBoardDeepLink === 'function') {
+        window.planifyOpenBoardDeepLink();
     }
 });
 
@@ -937,35 +1042,61 @@ if (searchInput && searchResults) {
                             <div class="px-3 py-2 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-600 text-xs font-medium text-gray-500 dark:text-gray-400">
                                 ${data.count} result${data.count !== 1 ? 's' : ''} found
                             </div>
-                            ${data.results.map(card => `
-                                <a href="${window.BASE_PATH || ''}/public/board.php?ref=${card.board_ref}&card=${card.id}" 
+                            ${data.results.map(item => {
+                                if (item.type === 'board') {
+                                    const boardHref = window.planifyBoardUrl
+                                        ? window.planifyBoardUrl({ boardRef: item.board_ref })
+                                        : `${window.BASE_PATH || ''}/public/board.php?ref=${encodeURIComponent(item.board_ref)}`;
+                                    return `
+                                <a href="${boardHref}"
+                                   class="block px-4 py-3 hover:bg-primary/5 dark:hover:bg-primary/10 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors duration-150">
+                                    <div class="flex items-start gap-3">
+                                        <div class="w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20 flex items-center justify-center shrink-0">
+                                            <i class="fas fa-columns text-primary text-sm"></i>
+                                        </div>
+                                        <div class="flex-1 min-w-0">
+                                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(item.board_name)}</div>
+                                            <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                                                <span class="text-primary">${escapeHtml(item.workspace_name)}</span>
+                                                <span class="mx-1">·</span>
+                                                <span>Board</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </a>`;
+                                }
+                                const taskHref = window.planifyBoardUrl
+                                    ? window.planifyBoardUrl({ openRef: item.open_ref })
+                                    : `${window.BASE_PATH || ''}/public/board.php?o=${encodeURIComponent(item.open_ref || '')}`;
+                                return `
+                                <a href="${taskHref}"
                                    class="block px-4 py-3 hover:bg-primary/5 dark:hover:bg-primary/10 border-b border-gray-100 dark:border-gray-700 last:border-b-0 transition-colors duration-150">
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex-1 min-w-0">
-                                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(card.title)}</div>
+                                            <div class="font-medium text-gray-900 dark:text-white truncate">${escapeHtml(item.title)}</div>
                                             <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                                                <span class="text-primary">${escapeHtml(card.workspace_name)}</span>
+                                                <span class="text-primary">${escapeHtml(item.workspace_name)}</span>
                                                 <span class="mx-1">›</span>
-                                                <span>${escapeHtml(card.board_name)}</span>
+                                                <span>${escapeHtml(item.board_name)}</span>
                                                 <span class="mx-1">›</span>
-                                                <span>${escapeHtml(card.list_name)}</span>
+                                                <span>${escapeHtml(item.list_name)}</span>
                                             </div>
-                                            ${card.assignees ? `<div class="text-xs text-gray-400 dark:text-gray-500 mt-1"><i class="fas fa-user text-[10px] mr-1"></i>${escapeHtml(card.assignees)}</div>` : ''}
+                                            ${item.assignees ? `<div class="text-xs text-gray-400 dark:text-gray-500 mt-1"><i class="fas fa-user text-[10px] mr-1"></i>${escapeHtml(item.assignees)}</div>` : ''}
                                         </div>
                                         <div class="flex flex-col items-end gap-1 flex-shrink-0">
-                                            ${card.priority_label ? `<span class="text-[10px] px-1.5 py-0.5 rounded ${getPriorityClass(card.priority)}">${card.priority_label}</span>` : ''}
-                                            ${card.due_date_formatted ? `<span class="text-[10px] ${card.is_overdue ? 'text-red-500' : 'text-gray-400'}">${card.due_date_formatted}</span>` : ''}
+                                            ${item.priority_label ? `<span class="text-[10px] px-1.5 py-0.5 rounded ${getPriorityClass(item.priority)}">${item.priority_label}</span>` : ''}
+                                            ${item.due_date_formatted ? `<span class="text-[10px] ${item.is_overdue ? 'text-red-500' : 'text-gray-400'}">${item.due_date_formatted}</span>` : ''}
                                         </div>
                                     </div>
-                                </a>
-                            `).join('')}
+                                </a>`;
+                            }).join('')}
                         `;
                         searchResults.classList.remove('hidden');
                     } else {
                         searchResults.innerHTML = `
                             <div class="px-4 py-6 text-center">
                                 <i class="fas fa-search text-2xl text-gray-300 dark:text-gray-600 mb-2"></i>
-                                <div class="text-gray-500 dark:text-gray-400">No tasks found</div>
+                                <div class="text-gray-500 dark:text-gray-400">No boards or tasks found</div>
                                 <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">Try a different search term</div>
                             </div>`;
                         searchResults.classList.remove('hidden');
@@ -1119,6 +1250,18 @@ function deleteList(listId) {
     });
 }
 
+/** Show dashed "Add task" only when a list has zero cards. */
+window.syncListAddTaskPrompt = function(listId) {
+    if (listId == null || listId === '') return;
+    const wrap = document.getElementById('list-add-task-wrap-' + listId);
+    if (!wrap) return;
+    const container = document.getElementById('list-' + listId);
+    const count = container
+        ? container.querySelectorAll('[data-card-id], .card-draggable, .card-item').length
+        : 0;
+    wrap.classList.toggle('hidden', count > 0);
+};
+
 // Show add card modal
 function showAddCardModal(listId) {
     const modal = document.createElement('div');
@@ -1201,9 +1344,10 @@ function createCard(e, listId) {
     // OPTIMISTIC UI: Add loading card to DOM immediately
     if (listContainer) {
         const tempCard = createOptimisticCard(tempId, title, listId);
-        listContainer.appendChild(tempCard);
-        
-        // Smooth scroll to new card
+        listContainer.insertBefore(tempCard, listContainer.firstChild);
+        if (typeof window.syncListAddTaskPrompt === 'function') {
+            window.syncListAddTaskPrompt(listId);
+        }
         tempCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
     
@@ -1231,6 +1375,9 @@ function createCard(e, listId) {
                 // Replace temp card with real card
                 tempCard.replaceWith(realCard);
             }
+            if (typeof window.syncListAddTaskPrompt === 'function') {
+                window.syncListAddTaskPrompt(listId);
+            }
             showToast('Task created successfully', 'success');
         } else {
             // Remove temp card on failure
@@ -1239,6 +1386,9 @@ function createCard(e, listId) {
                 tempCard.style.opacity = '0';
                 tempCard.style.transform = 'scale(0.9)';
                 setTimeout(() => tempCard.remove(), 200);
+            }
+            if (typeof window.syncListAddTaskPrompt === 'function') {
+                window.syncListAddTaskPrompt(listId);
             }
             showToast(data.message || 'Error creating task', 'error');
         }
@@ -1250,6 +1400,9 @@ function createCard(e, listId) {
             tempCard.style.opacity = '0';
             tempCard.style.transform = 'scale(0.9)';
             setTimeout(() => tempCard.remove(), 200);
+        }
+        if (typeof window.syncListAddTaskPrompt === 'function') {
+            window.syncListAddTaskPrompt(listId);
         }
         console.error('Error:', err);
         showToast('An error occurred while creating the task', 'error');
@@ -1445,7 +1598,7 @@ function showEditCardModal(cardId) {
                                     Cancel
                                 </button>
                                 <button type="submit" 
-                                        class="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-indigo-600">
+                                        class="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-neutral-800">
                                     Save Changes
                                 </button>
                             </div>
@@ -1574,11 +1727,20 @@ function deleteCard(cardId) {
         
         if (data.success) {
             showToast('Task deleted successfully', 'success');
-            // Remove the task element from the DOM with animation
             const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
+            let listIdForSync = null;
             if (cardElement) {
+                const listEl = cardElement.closest('[id^="list-"]');
+                if (listEl && listEl.dataset.listId) {
+                    listIdForSync = listEl.dataset.listId;
+                }
                 cardElement.style.opacity = '0';
-                setTimeout(() => cardElement.remove(), 300);
+                setTimeout(() => {
+                    cardElement.remove();
+                    if (listIdForSync && typeof window.syncListAddTaskPrompt === 'function') {
+                        window.syncListAddTaskPrompt(listIdForSync);
+                    }
+                }, 300);
             }
         } else {
             throw new Error(data.message || 'Failed to delete task');

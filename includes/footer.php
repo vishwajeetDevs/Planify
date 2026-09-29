@@ -1,6 +1,9 @@
 <!-- Common Scripts -->
     <script src="../assets/js/theme.js?v=<?php echo filemtime(__DIR__ . '/../assets/js/theme.js'); ?>"></script>
     <script src="../assets/js/app.js?v=<?php echo time(); ?>"></script>
+    <?php if (function_exists('isLoggedIn') && isLoggedIn()): ?>
+    <script src="../assets/js/realtime.js?v=<?php echo time(); ?>"></script>
+    <?php endif; ?>
     <script src="../assets/js/mention.js?v=<?php echo filemtime(__DIR__ . '/../assets/js/mention.js'); ?>"></script>
     <script src="../assets/js/writing-assistant.js?v=<?php echo filemtime(__DIR__ . '/../assets/js/writing-assistant.js'); ?>"></script>
     

@@ -92,6 +92,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
         </div>
         
         <!-- Boards Grid -->
+        <div id="workspaceBoards">
         <?php if (empty($boards)): ?>
         <div class="bg-white/90 dark:bg-gray-900/80 backdrop-blur-lg p-12 rounded-lg border-2 border-dashed border-gray-200 dark:border-gray-700 text-center transition-all duration-300 hover:border-primary dark:hover:border-primary animate-fade-in-up" style="animation-delay: 0.2s;">
             <i class="fas fa-clipboard text-5xl text-gray-400 mb-4 animate-bounce-subtle"></i>
@@ -113,17 +114,14 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                 $index++;
             ?>
             <div class="group relative animate-fade-in-up" style="animation-delay: <?php echo $delay; ?>s;"
-                 x-data="{ showMenu: false, boardId: <?php echo $board['id']; ?>, hovered: false }">
-                <div class="bg-white/90 dark:bg-gray-900/80 backdrop-blur-lg rounded-lg border border-dashed transition-all duration-300 p-5 h-40 flex flex-col hover:shadow-xl hover:-translate-y-1 overflow-hidden"
-                     @mouseenter="hovered = true"
-                     @mouseleave="hovered = false"
-                     :style="'border-top: 4px solid <?php echo $board['background_color'] ?? '#4F46E5'; ?>; border-top-style: solid; border-color: ' + (hovered ? '<?php echo $board['background_color'] ?? '#4F46E5'; ?>' : '') + '; --board-color: <?php echo $board['background_color'] ?? '#4F46E5'; ?>;'"
-                     :class="hovered ? '' : 'border-gray-200 dark:border-gray-700'">
+                 x-data="{ showMenu: false, boardId: <?php echo $board['id']; ?> }">
+                <div class="board-tile backdrop-blur-lg rounded-lg transition-all duration-300 p-5 h-40 flex flex-col hover:shadow-xl hover:-translate-y-1 overflow-hidden"
+                     style="--board-accent: <?php echo e($board['background_color'] ?? '#171717'); ?>;">
                     <!-- Three-dot menu button -->
                     <div class="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button 
                             @click.stop="showMenu = !showMenu"
-                            class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
+                            class="p-1.5 text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
                             @click.away="showMenu = false"
                             title="Board options">
                             <i class="fas fa-ellipsis-h w-4 h-4"></i>
@@ -146,7 +144,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                                     id: <?php echo $board['id']; ?>, 
                                     name: '<?php echo addslashes($board['name']); ?>', 
                                     description: '<?php echo isset($board['description']) ? addslashes($board['description']) : ''; ?>',
-                                    background_color: '<?php echo $board['background_color'] ?? '#4F46E5'; ?>'
+                                    background_color: '<?php echo $board['background_color'] ?? '#171717'; ?>'
                                 })"
                             >
                                 <i class="far fa-edit mr-2 w-4"></i> Edit
@@ -170,13 +168,13 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                                 <?php echo e($board['description']); ?>
                             </p>
                             <?php endif; ?>
-                            <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-center">
+                            <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 flex items-center">
                                 <i class="fas fa-list-ul mr-1.5 text-gray-400"></i>
                                 <?php echo $board['list_count']; ?> list<?php echo $board['list_count'] != 1 ? 's' : ''; ?>
                             </p>
                         </div>
-                        <div class="mt-auto pt-2 border-t border-gray-100 dark:border-gray-700">
-                            <span class="text-[11px] text-gray-400 flex items-center">
+                        <div class="mt-auto pt-2 border-t border-gray-200 dark:border-gray-600">
+                            <span class="text-[11px] text-gray-500 dark:text-gray-300 flex items-center">
                                 <i class="far fa-clock mr-1.5"></i>
                                 Created <?php echo timeAgo($board['created_at']); ?>
                             </span>
@@ -187,6 +185,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
             <?php endforeach; ?>
         </div>
         <?php endif; ?>
+        </div>
         
     </div>
     
@@ -229,7 +228,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                     <div class="grid grid-cols-5 gap-2">
                         <?php
                         $colors = [
-                            ['#4F46E5', 'Indigo'], ['#3B82F6', 'Blue'], ['#10B981', 'Green'], ['#8B5CF6', 'Purple'], ['#EC4899', 'Pink'],
+                            ['#171717', 'Black'], ['#3B82F6', 'Blue'], ['#10B981', 'Green'], ['#8B5CF6', 'Purple'], ['#EC4899', 'Pink'],
                             ['#EF4444', 'Red'], ['#F97316', 'Orange'], ['#F59E0B', 'Amber'], ['#14B8A6', 'Teal'], ['#06B6D4', 'Cyan'],
                             ['#0EA5E9', 'Sky'], ['#6366F1', 'Violet'], ['#D946EF', 'Fuchsia'], ['#F43F5E', 'Rose'], ['#6B7280', 'Gray']
                         ];
@@ -237,7 +236,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                         ?>
                         <label class="block cursor-pointer" title="<?php echo $color[1]; ?>">
                             <input type="radio" name="background_color" value="<?php echo $color[0]; ?>" class="sr-only peer" <?php echo $i === 0 ? 'checked' : ''; ?>>
-                            <div class="w-full h-10 rounded-lg transition-all duration-200 peer-checked:ring-2 peer-checked:ring-offset-2 peer-checked:ring-indigo-500 hover:scale-105 hover:shadow-md" style="background-color: <?php echo $color[0]; ?>;"></div>
+                            <div class="w-full h-10 rounded-lg transition-all duration-200 peer-checked:ring-2 peer-checked:ring-offset-2 peer-checked:ring-neutral-500 hover:scale-105 hover:shadow-md" style="background-color: <?php echo $color[0]; ?>;"></div>
                         </label>
                         <?php endforeach; ?>
                     </div>
@@ -444,23 +443,21 @@ function addBoardToGrid(board) {
     
     const safeName = escapeHtmlLocal(board.name);
     const safeDesc = escapeHtmlLocal(board.description || '');
-    const boardColor = board.background_color || '#4F46E5';
+    const boardColor = board.background_color || '#171717';
     const boardRef = board.ref || board.id;
     
     const boardCard = document.createElement('div');
     boardCard.className = 'group relative animate-fade-in-up';
-    boardCard.setAttribute('x-data', `{ showMenu: false, boardId: ${board.id}, hovered: false }`);
+    boardCard.setAttribute('x-data', `{ showMenu: false, boardId: ${board.id} }`);
     
     boardCard.innerHTML = `
-        <div class="bg-white/90 dark:bg-gray-900/80 backdrop-blur-lg rounded-lg border border-dashed border-gray-200 dark:border-gray-700 transition-all duration-300 p-5 h-40 flex flex-col hover:shadow-xl hover:-translate-y-1 overflow-hidden"
-             @mouseenter="hovered = true"
-             @mouseleave="hovered = false"
-             style="border-top: 4px solid ${boardColor}; border-top-style: solid;">
+        <div class="board-tile backdrop-blur-lg rounded-lg transition-all duration-300 p-5 h-40 flex flex-col hover:shadow-xl hover:-translate-y-1 overflow-hidden"
+             style="--board-accent: ${boardColor};">
             <!-- Three-dot menu button -->
             <div class="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                 <button 
                     @click.stop="showMenu = !showMenu"
-                    class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
+                    class="p-1.5 text-gray-500 dark:text-gray-200 hover:text-gray-800 dark:hover:text-white rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 hover:scale-110"
                     @click.away="showMenu = false"
                     title="Board options">
                     <i class="fas fa-ellipsis-h w-4 h-4"></i>
@@ -503,13 +500,13 @@ function addBoardToGrid(board) {
                         ${safeName}
                     </h3>
                     ${safeDesc ? `<p class="text-sm text-gray-500 dark:text-gray-400 mt-2 line-clamp-2">${safeDesc}</p>` : ''}
-                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 flex items-center">
+                    <p class="text-xs text-gray-600 dark:text-gray-300 mt-2 flex items-center">
                         <i class="fas fa-list-ul mr-1.5 text-gray-400"></i>
                         ${board.list_count || 0} list${(board.list_count || 0) !== 1 ? 's' : ''}
                     </p>
                 </div>
-                <div class="mt-auto pt-2 border-t border-gray-100 dark:border-gray-700">
-                    <span class="text-[11px] text-gray-400 flex items-center">
+                <div class="mt-auto pt-2 border-t border-gray-200 dark:border-gray-600">
+                    <span class="text-[11px] text-gray-500 dark:text-gray-300 flex items-center">
                         <i class="far fa-clock mr-1.5"></i>
                         Created 0 min ago
                     </span>
@@ -645,7 +642,7 @@ function showEditBoardModal(boardData) {
     // Populate color options
     const colorOptions = document.getElementById('editColorOptions');
     const colors = [
-        ['#4F46E5', 'Indigo'], ['#3B82F6', 'Blue'], ['#10B981', 'Green'], ['#8B5CF6', 'Purple'], ['#EC4899', 'Pink'],
+        ['#171717', 'Black'], ['#3B82F6', 'Blue'], ['#10B981', 'Green'], ['#8B5CF6', 'Purple'], ['#EC4899', 'Pink'],
         ['#EF4444', 'Red'], ['#F97316', 'Orange'], ['#F59E0B', 'Amber'], ['#14B8A6', 'Teal'], ['#06B6D4', 'Cyan'],
         ['#0EA5E9', 'Sky'], ['#6366F1', 'Violet'], ['#D946EF', 'Fuchsia'], ['#F43F5E', 'Rose'], ['#6B7280', 'Gray']
     ];
@@ -654,7 +651,7 @@ function showEditBoardModal(boardData) {
         <label class="block cursor-pointer" title="${name}">
             <input type="radio" name="background_color" value="${color}" 
                    class="sr-only peer" ${boardData.background_color === color ? 'checked' : ''}>
-            <div class="w-full h-10 rounded-lg transition-all duration-200 peer-checked:ring-2 peer-checked:ring-offset-2 peer-checked:ring-indigo-500 hover:scale-105 hover:shadow-md" 
+            <div class="w-full h-10 rounded-lg transition-all duration-200 peer-checked:ring-2 peer-checked:ring-offset-2 peer-checked:ring-neutral-500 hover:scale-105 hover:shadow-md" 
                  style="background-color: ${color};"></div>
         </label>
     `).join('');
@@ -826,4 +823,5 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+<script>window.currentWorkspaceId = <?php echo (int) $workspaceId; ?>;</script>
 <?php require_once '../includes/footer.php'; ?>

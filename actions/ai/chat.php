@@ -1244,7 +1244,7 @@ function generateFallbackResponse($userMessage, $boardData, $userName) {
             $count++;
             $name = $member['name'] ?? 'Unknown';
             $role = $member['role'] ?? 'member';
-            $roleDisplay = $role === 'owner' ? '👑 Owner' : ($role === 'admin' ? '⭐ Admin' : 'Member');
+            $roleDisplay = $role === 'owner' ? 'Super Admin' : ($role === 'admin' ? 'Admin' : 'Member');
             $taskCount = $memberTaskCounts[$name] ?? 0;
             $response .= "| {$count} | {$name} | {$roleDisplay} | {$taskCount} |\n";
         }

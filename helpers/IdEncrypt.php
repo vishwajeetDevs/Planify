@@ -158,6 +158,83 @@ function decryptId(string $encrypted): int|false {
 }
 
 /**
+ * Compact token: board + task (+ optional list) in one query param (~22 chars).
+ *
+ * @return array{board: int, card: int, list: int}|false
+ */
+function decryptOpenToken(string $encrypted): array|false {
+    if ($encrypted === '' || strlen($encrypted) < 10) {
+        return false;
+    }
+
+    try {
+        $key = getEncryptionKey();
+        $remainder = strlen($encrypted) % 4;
+        if ($remainder) {
+            $encrypted .= str_repeat('=', 4 - $remainder);
+        }
+        $data = base64_decode(strtr($encrypted, '-_', '+/'));
+        if ($data === false) {
+            return false;
+        }
+
+        $decrypted = openssl_decrypt($data, 'AES-128-ECB', $key, OPENSSL_RAW_DATA);
+        if ($decrypted === false || strlen($decrypted) !== 16) {
+            return false;
+        }
+
+        $body = substr($decrypted, 0, 14);
+        $checksum = substr($decrypted, 14, 2);
+        $expectedChecksum = substr(hash('crc32b', $body, true), 0, 2);
+        if (!hash_equals($checksum, $expectedChecksum)) {
+            return false;
+        }
+
+        $unpacked = unpack('Nboard/Ncard/Nlist', substr($body, 0, 12));
+        if (!$unpacked) {
+            return false;
+        }
+
+        $board = (int) $unpacked['board'];
+        $card = (int) $unpacked['card'];
+        $list = (int) $unpacked['list'];
+        if ($board <= 0) {
+            return false;
+        }
+
+        return ['board' => $board, 'card' => $card, 'list' => $list];
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/**
+ * @param int|null $listId Pass 0 or null to omit list (derived from task when opening).
+ */
+function encryptOpenToken(int $boardId, int $cardId, ?int $listId = null): string {
+    $boardId = (int) $boardId;
+    $cardId = (int) $cardId;
+    $listId = $listId !== null && $listId > 0 ? (int) $listId : 0;
+
+    if ($boardId <= 0 || $cardId <= 0) {
+        return '';
+    }
+
+    $key = getEncryptionKey();
+    $salt = random_bytes(2);
+    $data = pack('NNN', $boardId, $cardId, $listId) . $salt;
+    $checksum = substr(hash('crc32b', $data, true), 0, 2);
+    $payload = $data . $checksum;
+
+    $encrypted = openssl_encrypt($payload, 'AES-128-ECB', $key, OPENSSL_RAW_DATA);
+    if ($encrypted === false) {
+        return '';
+    }
+
+    return rtrim(strtr(base64_encode($encrypted), '+/', '-_'), '=');
+}
+
+/**
  * Create an encrypted URL for a resource
  * 
  * @param string $page The page name (e.g., 'board.php', 'workspace.php')
@@ -170,6 +247,77 @@ function encryptedUrl(string $page, int $id, array $extraParams = []): string {
     $params = array_merge($params, $extraParams);
     
     return $page . '?' . http_build_query($params);
+}
+
+/**
+ * Query parameters for deep-linking to a board and optional task/list.
+ *
+ * @return array<string, int|string>
+ */
+function boardDeepLinkQuery(int $boardId, ?int $cardId = null, ?int $listId = null): array {
+    if ($cardId !== null && $cardId > 0) {
+        return ['o' => encryptOpenToken($boardId, $cardId, null)];
+    }
+    if ($listId !== null && $listId > 0) {
+        return ['ref' => encryptId($boardId), 'l' => encryptId($listId)];
+    }
+    return ['ref' => encryptId($boardId)];
+}
+
+/**
+ * Decrypt a query parameter (e.g. c, card, l, list) with fallback to plain integer IDs.
+ */
+function getDecryptedQueryInt(string ...$paramNames): int|false {
+    foreach ($paramNames as $paramName) {
+        if (!isset($_GET[$paramName]) || $_GET[$paramName] === '') {
+            continue;
+        }
+
+        $raw = (string) $_GET[$paramName];
+        $decrypted = decryptId($raw);
+        if ($decrypted !== false) {
+            return $decrypted;
+        }
+
+        $plain = filter_var($raw, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($plain !== false) {
+            return (int) $plain;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * Absolute public URL to a board page (optionally opening a task).
+ */
+function taskPageUrl(int $boardId, int $cardId, ?int $listId = null): string {
+    if (!defined('APP_URL')) {
+        require_once __DIR__ . '/../config/env.php';
+        Env::load();
+        $appUrl = rtrim(planify_resolve_app_urls()['APP_URL'], '/');
+    } else {
+        $appUrl = rtrim(APP_URL, '/');
+    }
+
+    $query = boardDeepLinkQuery($boardId, $cardId, $listId);
+    return $appUrl . '/public/board.php?' . http_build_query($query);
+}
+
+/**
+ * Relative path (includes BASE_PATH) to the board page for in-app navigation.
+ */
+function boardPageHref(int $boardId, ?int $cardId = null, ?int $listId = null, array $extra = []): string {
+    if (!defined('BASE_PATH')) {
+        require_once __DIR__ . '/../config/env.php';
+        Env::load();
+        $basePath = planify_resolve_app_urls()['BASE_PATH'];
+    } else {
+        $basePath = BASE_PATH;
+    }
+
+    $query = array_merge(boardDeepLinkQuery($boardId, $cardId, $listId), $extra);
+    return rtrim($basePath, '/') . '/public/board.php?' . http_build_query($query);
 }
 
 /**
@@ -237,7 +385,7 @@ function showInvalidAccessError(string $message = 'Invalid or unauthorized acces
             <h1 class="text-xl font-bold text-gray-900 mb-2">Access Denied</h1>
             <p class="text-gray-600 mb-6"><?php echo htmlspecialchars($message); ?></p>
             <a href="<?php echo htmlspecialchars($redirectUrl ?? 'dashboard.php'); ?>" 
-               class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors">
+               class="inline-flex items-center px-4 py-2 bg-neutral-900 text-white font-medium rounded-lg hover:bg-neutral-800 transition-colors">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
                 </svg>

@@ -20,8 +20,6 @@ if ($boardId <= 0) {
     jsonResponse(['success' => false, 'message' => 'Invalid board ID'], 400);
 }
 
-// Check if user has permission (must be owner, admin, or member)
-// Also check if user is the board creator
 $stmt = $conn->prepare("
     SELECT bm.role, b.created_by 
     FROM boards b
@@ -32,34 +30,34 @@ $stmt->bind_param("ii", $userId, $boardId);
 $stmt->execute();
 $access = $stmt->get_result()->fetch_assoc();
 
-$hasAccess = false;
-if ($access) {
-    // User is board creator
-    if ($access['created_by'] == $userId) {
-        $hasAccess = true;
-    }
-    // User has owner, admin, or member role
-    if ($access['role'] && in_array($access['role'], ['owner', 'admin', 'member'])) {
-        $hasAccess = true;
-    }
-}
+$canReview = $access && (
+    (int) $access['created_by'] === (int) $userId
+    || in_array($access['role'], ['owner', 'admin'], true)
+);
 
-if (!$hasAccess) {
-    jsonResponse(['success' => false, 'message' => 'Only board owners and members can view join requests'], 403);
+if (!$canReview) {
+    jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can view access requests'], 403);
 }
 
 try {
-    // Get all pending requests
     $stmt = $conn->prepare("
-        SELECT jr.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar
+        SELECT jr.*, u.name as user_name, u.email as user_email, u.avatar as user_avatar,
+               sl.role_on_join
         FROM join_requests jr
         INNER JOIN users u ON jr.user_id = u.id
+        LEFT JOIN share_links sl ON jr.share_link_id = sl.id
         WHERE jr.board_id = ? AND jr.status = 'pending'
         ORDER BY jr.created_at DESC
     ");
     $stmt->bind_param("i", $boardId);
     $stmt->execute();
     $requests = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    foreach ($requests as &$request) {
+        $role = in_array($request['role_on_join'], ['admin', 'member'], true) ? $request['role_on_join'] : 'member';
+        $request['role_on_join'] = $role;
+        $request['role_label'] = roleLabel($role);
+    }
+    unset($request);
     
     jsonResponse([
         'success' => true,

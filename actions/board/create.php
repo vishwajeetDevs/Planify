@@ -19,7 +19,7 @@ validateCSRFToken();
 $workspaceId = intval($_POST['workspace_id'] ?? 0);
 $name = trim($_POST['name'] ?? '');
 $description = trim($_POST['description'] ?? '');
-$backgroundColor = $_POST['background_color'] ?? '#4F46E5';
+$backgroundColor = $_POST['background_color'] ?? '#171717';
 $userId = $_SESSION['user_id'];
 
 if (empty($name)) {

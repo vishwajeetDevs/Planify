@@ -66,7 +66,7 @@ try {
     
     // Owner and admin can remove members
     if (!in_array($currentUserMembership['role'], ['owner', 'admin'])) {
-        jsonResponse(['success' => false, 'message' => 'Only board owners and admins can remove members'], 403);
+        jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can remove members'], 403);
     }
     
     // Check if target user is a member of the board
@@ -86,12 +86,12 @@ try {
     
     // Cannot remove another owner (only one owner exists)
     if ($targetMembership['role'] === 'owner') {
-        jsonResponse(['success' => false, 'message' => 'Cannot remove the board owner'], 403);
+        jsonResponse(['success' => false, 'message' => 'The Super Admin cannot be removed'], 403);
     }
     
     // Admins cannot remove other admins - only owner can
     if ($currentUserMembership['role'] === 'admin' && $targetMembership['role'] === 'admin') {
-        jsonResponse(['success' => false, 'message' => 'Only the board owner can remove admins'], 403);
+        jsonResponse(['success' => false, 'message' => 'Only the Super Admin can remove an Admin'], 403);
     }
     
     // Get current user name for activity log

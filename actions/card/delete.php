@@ -64,7 +64,7 @@ try {
         JOIN lists l ON c.list_id = l.id
         JOIN boards b ON l.board_id = b.id
         JOIN board_members bm ON l.board_id = bm.board_id
-        WHERE c.id = ? AND bm.user_id = ? AND (bm.role = 'owner' OR bm.role = 'member')
+        WHERE c.id = ? AND bm.user_id = ? AND bm.role IN ('owner', 'admin', 'member')
     ");
     
     if (!$stmt) {

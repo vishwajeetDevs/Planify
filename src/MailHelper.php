@@ -945,8 +945,14 @@ class MailHelper {
             return $results;
         }
         
-        // Build task URL with encrypted ID
-        $taskUrl = APP_URL . '/public/board.php?ref=' . encryptId($taskInfo['board_id']) . '&card=' . $cardId;
+        $listStmt = $conn->prepare('SELECT list_id FROM cards WHERE id = ?');
+        $listStmt->bind_param('i', $cardId);
+        $listStmt->execute();
+        $listRow = $listStmt->get_result()->fetch_assoc();
+        $listStmt->close();
+        $listId = $listRow ? (int) $listRow['list_id'] : null;
+
+        $taskUrl = taskPageUrl((int) $taskInfo['board_id'], $cardId, $listId);
         
         // Send email to each assignee
         foreach ($assignees as $assignee) {

@@ -22,6 +22,29 @@ if (!isset($_SESSION['user_id'])) {
 global $conn;
 $userId = $_SESSION['user_id'];
 
+/** MySQL UTC datetime from UTC_TIMESTAMP() → ISO-8601 Z and epoch ms */
+function planifyUtcMysqlToIso(?string $mysqlDatetime): ?string {
+    if (!$mysqlDatetime) {
+        return null;
+    }
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $mysqlDatetime, new DateTimeZone('UTC'));
+    if (!$dt) {
+        return null;
+    }
+    return $dt->format('Y-m-d\TH:i:s\Z');
+}
+
+function planifyUtcMysqlToMs(?string $mysqlDatetime): ?int {
+    if (!$mysqlDatetime) {
+        return null;
+    }
+    $dt = DateTimeImmutable::createFromFormat('Y-m-d H:i:s', $mysqlDatetime, new DateTimeZone('UTC'));
+    if (!$dt) {
+        return null;
+    }
+    return $dt->getTimestamp() * 1000;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $cardId = filter_input(INPUT_GET, 'card_id', FILTER_VALIDATE_INT);
     
@@ -53,8 +76,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         while ($row = $result->fetch_assoc()) {
             // Timestamps are stored with UTC_TIMESTAMP(), so they're already UTC
             // Format as ISO 8601 with Z suffix
-            $viewedAt = $row['viewed_at'] ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['viewed_at'])) : null;
-            $lastViewedAt = $row['last_viewed_at'] ? gmdate('Y-m-d\TH:i:s\Z', strtotime($row['last_viewed_at'])) : null;
+            $viewedAt = planifyUtcMysqlToIso($row['viewed_at']);
+            $lastViewedAt = planifyUtcMysqlToIso($row['last_viewed_at']);
+            $lastViewedMs = planifyUtcMysqlToMs($row['last_viewed_at']);
             
             $viewers[] = [
                 'user_id' => (int)$row['user_id'],
@@ -63,18 +87,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                 'avatar' => $row['avatar'],
                 'viewed_at' => $viewedAt,
                 'last_viewed_at' => $lastViewedAt,
+                'last_viewed_at_ms' => $lastViewedMs,
                 'view_count' => (int)$row['view_count']
             ];
         }
         
-        // Get current database time for relative time calculation
-        $dbTimeResult = $conn->query("SELECT NOW() as db_time");
-        $dbTime = date('Y-m-d H:i:s');
+        // UTC clock for client-side relative times (matches UTC_TIMESTAMP on views)
+        $dbTimeResult = $conn->query("SELECT UTC_TIMESTAMP() AS server_time_utc");
+        $serverTimeUtc = gmdate('Y-m-d H:i:s');
         if ($dbTimeResult && $dbRow = $dbTimeResult->fetch_assoc()) {
-            $dbTime = $dbRow['db_time'];
+            $serverTimeUtc = $dbRow['server_time_utc'];
         }
+        $serverTimeMs = planifyUtcMysqlToMs($serverTimeUtc);
         
-        echo json_encode(['success' => true, 'viewers' => $viewers, 'total_count' => count($viewers), 'server_time' => $dbTime]);
+        echo json_encode([
+            'success' => true,
+            'viewers' => $viewers,
+            'total_count' => count($viewers),
+            'server_time' => $serverTimeUtc,
+            'server_time_ms' => $serverTimeMs,
+        ]);
         exit;
     } catch (Exception $e) {
         error_log('Error in card/viewers.php GET: ' . $e->getMessage());

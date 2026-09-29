@@ -81,7 +81,7 @@ try {
         exit;
     }
     
-    // Check if user can edit the board (owner, admin, or member - not viewer/commenter)
+    // Super Admin, Admin, and Member can edit the board
     if (!canEditBoard($conn, $userId, $card['board_id'])) {
         http_response_code(403);
         echo json_encode(['success' => false, 'message' => 'You do not have permission to modify this card']);

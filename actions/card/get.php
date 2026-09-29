@@ -7,6 +7,7 @@ while (ob_get_level()) {
 session_start();
 require_once '../../includes/functions.php';
 require_once '../../config/db.php';
+require_once '../../helpers/IdEncrypt.php';
 
 // Set JSON header early
 header('Content-Type: application/json; charset=utf-8');
@@ -92,7 +93,10 @@ try {
 
     echo json_encode([
         'success' => true,
-        'card' => $card
+        'card' => $card,
+        'link' => [
+            'o' => encryptOpenToken((int) $boardResult['board_id'], $cardId, null),
+        ],
     ]);
     
 } catch (Exception $e) {

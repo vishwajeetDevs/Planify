@@ -32,7 +32,7 @@ if (strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
 
 $boardId = intval($input['board_id'] ?? 0);
 $accessType = $input['access_type'] ?? 'join_on_click';
-$roleOnJoin = $input['role_on_join'] ?? 'viewer';
+$roleOnJoin = $input['role_on_join'] ?? 'member';
 $expiresIn = $input['expires_in'] ?? null; // 'never', '1day', '7days', '30days', or custom datetime
 $maxUses = isset($input['max_uses']) ? intval($input['max_uses']) : null;
 $restrictDomain = trim($input['restrict_domain'] ?? '');
@@ -51,7 +51,7 @@ if (!in_array($accessType, $validAccessTypes)) {
 }
 
 // Validate role on join
-$validRoles = ['viewer', 'commenter', 'member'];
+$validRoles = ['admin', 'member'];
 if (!in_array($roleOnJoin, $validRoles)) {
     jsonResponse(['success' => false, 'message' => 'Invalid role'], 400);
 }
@@ -68,8 +68,8 @@ $stmt->bind_param("ii", $boardId, $userId);
 $stmt->execute();
 $access = $stmt->get_result()->fetch_assoc();
 
-if (!$access || !in_array($access['role'], ['owner', 'admin', 'member'])) {
-    jsonResponse(['success' => false, 'message' => 'You do not have permission to share this board'], 403);
+if (!$access || !in_array($access['role'], ['owner', 'admin'], true)) {
+    jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can share this board'], 403);
 }
 
 // Calculate expiration date

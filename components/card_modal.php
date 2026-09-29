@@ -1,6 +1,6 @@
 <!-- Card Details Modal - Trello-style Layout -->
-<div id="cardModal" class="fixed inset-0 bg-black/60 dark:bg-black/80 z-50 flex items-center justify-center p-4 overflow-y-auto hidden transition-all duration-300 opacity-0">
-    <div class="bg-gray-100 dark:bg-gray-900 rounded-lg w-full max-w-6xl relative shadow-2xl transform transition-all duration-300 ease-out opacity-0 translate-y-4 scale-95 my-auto max-h-[92vh] overflow-y-auto" 
+<div id="cardModal" class="fixed inset-0 bg-black/60 dark:bg-black/80 z-[250] flex items-center justify-center p-2 sm:p-3 overflow-y-auto hidden transition-all duration-300 opacity-0">
+    <div class="card-modal-shell bg-gray-100 dark:bg-gray-900 rounded-xl w-full relative shadow-2xl transform transition-all duration-300 ease-out opacity-0 translate-y-4 scale-95 my-auto overflow-hidden" 
          id="cardModalContent">
         
         <!-- Header - Clean minimal design -->
@@ -41,7 +41,7 @@
                         <div id="viewersList" style="max-height: 256px; overflow-y: auto;">
                             <!-- Viewers will be loaded here -->
                             <div style="padding: 16px; text-align: center;">
-                                <div class="animate-spin" style="width: 20px; height: 20px; border: 2px solid #6366f1; border-top-color: transparent; border-radius: 50%; margin: 0 auto;"></div>
+                                <div class="viewers-spinner animate-spin"></div>
                             </div>
                         </div>
                     </div>
@@ -55,10 +55,10 @@
         </div>
 
         <!-- Main Content Area - Two Column Layout -->
-        <div id="modalPanelsContainer" class="flex flex-col lg:flex-row relative">
+        <div id="modalPanelsContainer" class="flex flex-col lg:flex-row relative flex-1 min-h-0">
             
             <!-- Left Column - Card Details -->
-            <div id="leftPanel" class="flex-1 p-5 lg:border-r-0 border-gray-200 dark:border-gray-800 overflow-y-auto overflow-x-hidden" style="min-width: 300px;">
+            <div id="leftPanel" class="flex-1 p-5 lg:p-6 lg:border-r-0 border-gray-200 dark:border-gray-800 overflow-y-auto overflow-x-hidden card-modal-scroll" style="min-width: 340px;">
                 
                 <!-- Card Title with Completion Checkbox -->
                 <div class="flex items-start gap-3 mb-5">
@@ -142,24 +142,6 @@
                         </div>
                     </div>
                     
-                    <!-- Checklist Button -->
-                    <div class="relative">
-                        <button onclick="toggleChecklistPopup()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
-                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-                        Checklist
-                    </button>
-                        <div id="checklistPopup" class="action-popup hidden absolute left-0 top-full mt-1 w-72 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50">
-                            <div class="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                                <span class="text-sm font-semibold text-gray-800 dark:text-white">Add Checklist</span>
-                                <button onclick="toggleChecklistPopup()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-                            </div>
-                            <div class="p-3">
-                                <input type="text" id="newChecklistTitle" placeholder="Checklist title" value="Checklist" class="w-full px-3 py-2 text-sm border border-gray-200 dark:border-gray-600 rounded-md dark:bg-gray-700 dark:text-white mb-3">
-                                <button onclick="createChecklist()" class="w-full px-3 py-2 text-xs font-medium bg-primary text-white rounded-md hover:bg-primary-dark">Add</button>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <!-- Members Button -->
                     <div class="relative">
                         <button onclick="toggleMembersPopup()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
@@ -170,6 +152,9 @@
                             <div class="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
                                 <span class="text-sm font-semibold text-gray-800 dark:text-white">Members</span>
                                 <button onclick="toggleMembersPopup()" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                            </div>
+                            <div id="memberAssignBar" class="hidden h-1 bg-primary/15 overflow-hidden">
+                                <div class="member-assign-bar h-full bg-primary"></div>
                             </div>
                             <div id="membersList" class="p-2 max-h-64 overflow-y-auto">
                                 <div class="text-center py-4"><div class="animate-spin w-5 h-5 border-2 border-primary border-t-transparent rounded-full mx-auto"></div></div>
@@ -201,6 +186,19 @@
                                     <button id="addLinkBtn" onclick="addLinkAttachment()" class="w-full px-3 py-2 text-xs font-medium bg-primary text-white rounded-md hover:bg-primary-dark transition-all">Add Link</button>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Checklist feature toggle (right of attachments) -->
+                    <div class="ml-auto flex items-center shrink-0">
+                        <div class="inline-flex items-center gap-2 pl-2 border-l border-gray-200 dark:border-gray-700">
+                            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                            <span class="text-xs font-medium text-gray-600 dark:text-gray-400 hidden sm:inline">Checklist</span>
+                            <button type="button" id="checklistFeatureToggle" onclick="toggleChecklistFeature()"
+                                    class="checklist-feature-toggle" role="switch" aria-checked="false" aria-label="Show checklist on this task"
+                                    title="Show or hide checklist">
+                                <span class="checklist-feature-toggle-knob" aria-hidden="true"></span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -256,10 +254,10 @@
                     </div>
                 </div>
 
-                <!-- Checklists Section -->
-                <div id="checklistsSection" class="mb-5">
-                    <div id="checklistsContainer"></div>
-            </div>
+                <!-- Checklist (collapsible; visible when feature toggle is on; width matches description) -->
+                <div id="checklistsSection" class="mb-5 hidden">
+                    <div id="checklistsContainer" class="checklist-blocks w-full"></div>
+                </div>
 
                 <!-- Attachments Section -->
                 <div id="attachmentsSection" class="hidden mb-5">
@@ -280,7 +278,7 @@
                 </div>
 
             <!-- Right Column - Comments and Activity -->
-            <div id="rightPanel" class="p-5 bg-white dark:bg-gray-800 lg:rounded-br-lg overflow-y-auto overflow-x-hidden" style="width: 320px; min-width: 280px;">
+            <div id="rightPanel" class="p-5 lg:p-6 bg-white dark:bg-gray-800 lg:rounded-br-lg overflow-hidden flex flex-col min-h-0 card-modal-comments-panel">
 
                 <!-- Comment Input -->
                 <div class="mb-4">
@@ -362,7 +360,7 @@
             </div>
             
                 <!-- Activity/Comments List -->
-                <div id="commentsContainer" class="space-y-3 max-h-[400px] overflow-y-auto overflow-x-hidden custom-scrollbar pr-1">
+                <div id="commentsContainer" class="space-y-3 flex-1 min-h-[200px] overflow-y-auto overflow-x-hidden custom-scrollbar pr-1 card-modal-comments-list">
                     <!-- Comments will be loaded here -->
                 </div>
             </div>
@@ -370,8 +368,62 @@
     </div>
 </div>
 
+<!-- Add checklist modal -->
+<div id="checklistCreateModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-[260] flex items-center justify-center p-4 hidden" onclick="if (event.target === this) hideChecklistCreateModal()">
+    <div class="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md border border-gray-200 dark:border-gray-700" role="dialog" aria-labelledby="checklistCreateModalTitle" aria-modal="true">
+        <div class="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <h3 id="checklistCreateModalTitle" class="text-base font-semibold text-gray-900 dark:text-white">Add checklist</h3>
+            <button type="button" onclick="hideChecklistCreateModal()" class="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700" aria-label="Close">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="p-5">
+            <label for="newChecklistTitle" class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1.5">Title</label>
+            <input type="text" id="newChecklistTitle" placeholder="Checklist" value="Checklist" autocomplete="off" data-no-ai-assist
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();createChecklist();}"
+                   class="w-full px-3 py-2.5 text-sm border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary">
+            <p class="mt-2 text-xs text-gray-500 dark:text-gray-400">Each task can have one checklist.</p>
+        </div>
+        <div class="px-5 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-2">
+            <button type="button" onclick="hideChecklistCreateModal(true)" class="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Cancel</button>
+            <button type="button" onclick="createChecklist()" class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-dark rounded-lg transition-colors">Create checklist</button>
+        </div>
+    </div>
+</div>
+
 <!-- Styles -->
 <style>
+/* Task modal — large viewport footprint */
+.card-modal-shell {
+    width: min(1440px, 96vw);
+    max-width: none;
+    min-height: min(860px, 90vh);
+    max-height: 96vh;
+    display: flex;
+    flex-direction: column;
+}
+#modalPanelsContainer {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.card-modal-scroll {
+    max-height: calc(96vh - 2.75rem);
+}
+.card-modal-comments-panel {
+    width: min(420px, 38vw);
+    min-width: 300px;
+    max-height: calc(96vh - 2.75rem);
+}
+@media (min-width: 1024px) {
+    .card-modal-comments-panel {
+        min-width: 360px;
+    }
+}
+.card-modal-comments-list {
+    max-height: none;
+    flex: 1 1 auto;
+}
+
 /* Modal scrollbar */
 #cardModalContent::-webkit-scrollbar { width: 6px; }
 #cardModalContent::-webkit-scrollbar-track { background: transparent; }
@@ -412,7 +464,7 @@
 .dark .activity-text code { background: #4b5563; color: #f3f4f6; }
 
 /* Mention links - theme aware */
-.mention-link { color: #4f46e5; font-weight: 500; background: rgba(79, 70, 229, 0.1); padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
+.mention-link { color: var(--color-primary-text); font-weight: 500; background: rgba(var(--color-primary-rgb), 0.12); padding: 0.125rem 0.375rem; border-radius: 0.25rem; }
 .dark .mention-link { color: #a5b4fc; background: rgba(129, 140, 248, 0.2); }
 
 /* Custom scrollbar */
@@ -421,30 +473,47 @@
 .custom-scrollbar::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
 .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #4b5563; }
 
+.member-assign-bar {
+    width: 40%;
+    animation: memberAssignSlide 0.8s ease-in-out infinite;
+}
+@keyframes memberAssignSlide {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(280%); }
+}
+
 /* Viewers dropdown styles */
+.viewers-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    margin: 0 auto;
+}
 .viewers-dropdown {
     animation: dropdownFadeIn 0.15s ease-out;
-    background: #ffffff !important;
-    border: 1px solid #e5e7eb !important;
+    background: var(--surface-1) !important;
+    border: 1px solid var(--surface-border) !important;
 }
 .viewers-dropdown-header {
-    background: #f9fafb !important;
-    border-color: #e5e7eb !important;
-    color: #374151 !important;
+    background: var(--surface-2) !important;
+    border-color: var(--surface-border) !important;
+    color: var(--color-primary-text) !important;
 }
 .viewer-item {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     padding: 0.625rem 0.75rem;
-    border-bottom: 1px solid #f3f4f6;
+    border-bottom: 1px solid var(--surface-border);
     transition: background-color 0.15s ease;
 }
 .viewer-item:last-child {
     border-bottom: none;
 }
 .viewer-item:hover {
-    background: #f9fafb;
+    background: var(--surface-2);
 }
 .viewer-avatar {
     width: 32px;
@@ -454,8 +523,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-    color: white;
+    background: linear-gradient(135deg, var(--color-primary-light) 0%, var(--color-primary) 100%);
+    color: var(--color-on-primary);
     font-size: 12px;
     font-weight: 600;
 }
@@ -472,56 +541,30 @@
 .viewer-name {
     font-size: 13px;
     font-weight: 500;
-    color: #1f2937;
+    color: #171717;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .viewer-time {
     font-size: 11px;
-    color: #9ca3af;
+    color: var(--text-muted);
     margin-top: 1px;
 }
 .viewer-count {
     font-size: 10px;
-    color: #6b7280;
-    background: #f3f4f6;
+    color: var(--text-muted);
+    background: var(--surface-2);
     padding: 2px 6px;
     border-radius: 9999px;
 }
 .viewers-empty {
-    color: #9ca3af;
+    color: var(--text-muted);
     font-size: 12px;
 }
 
-/* Dark Theme */
-.dark .viewers-dropdown {
-    background: #1f2937 !important;
-    border-color: #374151 !important;
-}
-.dark .viewers-dropdown-header {
-    background: #111827 !important;
-    border-color: #374151 !important;
-    color: #e5e7eb !important;
-}
-.dark .viewer-item {
-    border-color: #374151;
-}
-.dark .viewer-item:hover {
-    background: #374151;
-}
 .dark .viewer-name {
-    color: #f3f4f6;
-}
-.dark .viewer-time {
-    color: #9ca3af;
-}
-.dark .viewer-count {
-    color: #9ca3af;
-    background: #374151;
-}
-.dark .viewers-empty {
-    color: #6b7280;
+    color: #f5f5f5;
 }
 
 @keyframes dropdownFadeIn {
@@ -531,11 +574,10 @@
 #viewersList::-webkit-scrollbar { width: 4px; }
 #viewersList::-webkit-scrollbar-track { background: transparent; }
 #viewersList::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
-.dark #viewersList::-webkit-scrollbar-thumb { background: #4b5563; }
+.dark #viewersList::-webkit-scrollbar-thumb { background: #525252; }
 
 /* Viewers button hover effect */
-#viewersBtn:hover svg { stroke: #4f46e5; }
-.dark #viewersBtn:hover svg { stroke: #a5b4fc; }
+#viewersBtn:hover svg { stroke: var(--color-primary-text); }
 
 /* Action popup styles */
 .action-popup {
@@ -546,9 +588,243 @@
     to { opacity: 1; transform: translateY(0); }
 }
 
-/* Checklist progress bar */
-#checklistsContainer .h-1\.5 {
-    height: 6px;
+/* Checklist block */
+.checklist-blocks:empty {
+    display: none;
+}
+.checklist-card {
+    border-radius: 0.5rem;
+    border: 2px solid var(--surface-border, #e5e7eb);
+    background: rgba(255, 255, 255, 0.85);
+    padding: 1rem 1.125rem;
+}
+.checklist-blocks {
+    width: 100%;
+}
+.checklist-card.checklist-dropdown {
+    width: 100%;
+    padding: 0;
+    overflow: hidden;
+    border-width: 2px;
+    border-radius: 0.5rem;
+    background: rgba(249, 250, 251, 0.5);
+}
+.dark .checklist-card.checklist-dropdown {
+    background: rgba(31, 41, 55, 0.5);
+}
+.checklist-item {
+    cursor: pointer;
+    user-select: none;
+}
+.checklist-item-checkbox {
+    pointer-events: none;
+}
+.dark .checklist-card {
+    background: rgba(31, 41, 55, 0.65);
+    border-color: var(--surface-border, #4b5563);
+}
+.checklist-dropdown-trigger {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 0.875rem;
+    text-align: left;
+    border-radius: 0.375rem;
+    transition: background-color 0.15s ease;
+}
+.checklist-dropdown-trigger:hover {
+    background: rgba(0, 0, 0, 0.03);
+}
+.dark .checklist-dropdown-trigger:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+.checklist-dropdown-chevron {
+    transition: transform 0.2s ease;
+}
+.checklist-dropdown.is-open .checklist-dropdown-chevron {
+    transform: rotate(90deg);
+}
+.checklist-dropdown-panel {
+    padding: 0 0.875rem 0.75rem;
+    border-top: 1px solid var(--surface-border, #e5e7eb);
+}
+.dark .checklist-dropdown-panel {
+    border-top-color: #4b5563;
+}
+.checklist-dropdown-panel.is-collapsed {
+    display: none;
+}
+.checklist-feature-toggle {
+    position: relative;
+    width: 2.25rem;
+    height: 1.25rem;
+    border-radius: 9999px;
+    background: #d1d5db;
+    transition: background-color 0.2s ease;
+    flex-shrink: 0;
+}
+.dark .checklist-feature-toggle {
+    background: #4b5563;
+}
+.checklist-feature-toggle[aria-checked="true"] {
+    background: var(--color-primary, #171717);
+}
+.checklist-feature-toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+    transition: transform 0.2s ease;
+}
+.checklist-feature-toggle[aria-checked="true"] .checklist-feature-toggle-knob {
+    transform: translateX(1rem);
+}
+#checklistsContainer .checklist-progress-track {
+    height: 4px;
+}
+
+/* Checklist item check control */
+.checklist-item-check {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    flex-shrink: 0;
+    cursor: pointer;
+}
+.checklist-item-checkbox {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    margin: 0;
+    width: 100%;
+    height: 100%;
+}
+.checklist-item-check-box {
+    width: 100%;
+    height: 100%;
+    border-radius: 9999px;
+    border: 2px solid #9ca3af;
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.1s ease;
+    pointer-events: none;
+}
+.dark .checklist-item-check-box {
+    border-color: #6b7280;
+}
+.checklist-item-check:hover .checklist-item-check-box {
+    border-color: var(--color-primary, #171717);
+}
+.checklist-item-checkbox:focus-visible + .checklist-item-check-box {
+    outline: 2px solid rgba(var(--color-primary-rgb, 23, 23, 23), 0.35);
+    outline-offset: 2px;
+}
+.checklist-item-checkbox:checked + .checklist-item-check-box {
+    background: #22c55e;
+    border-color: #16a34a;
+}
+.checklist-item-checkbox:checked + .checklist-item-check-box svg {
+    opacity: 1;
+    transform: scale(1);
+}
+.checklist-item-check-box svg {
+    width: 0.65rem;
+    height: 0.65rem;
+    color: #fff;
+    opacity: 0;
+    transform: scale(0.5);
+    transition: opacity 0.12s ease, transform 0.12s ease;
+}
+
+.checklist-add-trigger-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.25rem 0.375rem;
+    margin-left: -0.375rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    color: #6b7280;
+    border-radius: 0.375rem;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.checklist-add-trigger-row:hover {
+    color: var(--color-primary-text, #374151);
+    background: rgba(0, 0, 0, 0.04);
+}
+.dark .checklist-add-trigger-row {
+    color: #9ca3af;
+}
+.dark .checklist-add-trigger-row:hover {
+    background: rgba(255, 255, 255, 0.06);
+}
+.checklist-add-form {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.125rem;
+}
+.checklist-add-form.is-hidden {
+    display: none;
+}
+.checklist-add-input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8125rem;
+    line-height: 1.25rem;
+    border: none;
+    border-bottom: 1px solid #e5e7eb;
+    border-radius: 0;
+    background: transparent;
+    color: inherit;
+}
+.checklist-add-input:focus {
+    outline: none;
+    border-bottom-color: var(--color-primary, #171717);
+}
+.dark .checklist-add-input {
+    border-bottom-color: #4b5563;
+}
+.checklist-add-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    flex-shrink: 0;
+    border-radius: 0.375rem;
+    color: #6b7280;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+.checklist-add-icon-btn:hover:not(:disabled) {
+    color: var(--color-primary-text, #111);
+    background: rgba(0, 0, 0, 0.05);
+}
+.checklist-add-icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+.checklist-add-cancel-btn {
+    font-size: 0.75rem;
+    color: #9ca3af;
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+}
+.checklist-add-cancel-btn:hover {
+    color: #6b7280;
+    background: rgba(0, 0, 0, 0.04);
 }
 
 /* Image Lightbox */
@@ -640,21 +916,21 @@
     transition: all 0.2s ease;
 }
 .dark .divider-line {
-    background: #4b5563;
+    background: #525252;
 }
 .panel-divider:hover .divider-handle {
-    background: rgba(99, 102, 241, 0.1);
+    background: rgba(var(--color-primary-rgb), 0.12);
 }
 .panel-divider:hover .divider-line {
-    background: #6366f1;
+    background: var(--color-primary);
     height: 64px;
     width: 5px;
 }
 .panel-divider.dragging .divider-handle {
-    background: rgba(99, 102, 241, 0.15);
+    background: rgba(var(--color-primary-rgb), 0.18);
 }
 .panel-divider.dragging .divider-line {
-    background: #4f46e5;
+    background: var(--color-primary-dark);
     height: 80px;
     width: 6px;
 }
@@ -1348,8 +1624,9 @@ window.saveDescription = function() {
     });
 };
 
-window.loadCardDetails = function(cardId) {
+window.loadCardDetails = function(cardId, options) {
     if (!cardId) return;
+    const opts = options && typeof options === 'object' ? options : {};
     window.currentCardId = cardId;
     
     // Reset list name while loading
@@ -1382,6 +1659,10 @@ window.loadCardDetails = function(cardId) {
             
             if (window.loadComments) window.loadComments(cardId);
             if (window.loadActivity) window.loadActivity(cardId);
+
+            if (opts.syncUrl && data.link && data.link.o && typeof window.planifySyncBoardLocationWithOpen === 'function') {
+                window.planifySyncBoardLocationWithOpen(data.link.o);
+            }
             
             // Initialize mention system and paste handler
             requestAnimationFrame(() => {
@@ -1398,6 +1679,10 @@ window.loadCardDetails = function(cardId) {
         })
         .catch(err => {
             console.error(err);
+            if (window.PlanifyRealtime && /not found|deleted|no longer/i.test(String(err && err.message || ''))) {
+                window.PlanifyRealtime.invalidateCard(cardId, 'This task is no longer available.');
+                return;
+            }
             if (window.showToast) window.showToast('Failed to load', 'error');
         });
 };
@@ -1583,7 +1868,7 @@ function formatCommentTime(dateString) {
         const elapsed = Date.now() - window.clientTimeAtFetch;
         nowMs = window.serverTimeMs + elapsed;
     } else {
-        nowMs = date.getTime(); // Fallback: treat as "just now" if no server time
+        nowMs = Date.now();
     }
     
     const diff = Math.floor((nowMs - date.getTime()) / 1000);
@@ -1894,8 +2179,9 @@ window.saveEditComment = function(id) {
     });
 };
 
-window.deleteComment = function(id) {
-    if (!confirm('Delete this comment?')) return;
+window.deleteComment = async function(id) {
+    const ok = await planifyConfirm({ title: 'Delete comment?', message: 'This comment will be permanently removed.', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
     fetch((window.BASE_PATH || '') + '/actions/comment/delete.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1952,7 +2238,7 @@ window.loadCardViewers = function(cardId) {
     // Show loading state
     viewersList.innerHTML = `
         <div style="padding: 20px; text-align: center;">
-            <div class="animate-spin" style="width: 20px; height: 20px; border: 2px solid #6366f1; border-top-color: transparent; border-radius: 50%; margin: 0 auto 8px;"></div>
+            <div class="viewers-spinner animate-spin" style="margin-bottom: 8px;"></div>
             <p class="viewers-empty">Loading...</p>
         </div>`;
     
@@ -1962,14 +2248,7 @@ window.loadCardViewers = function(cardId) {
             if (data.success && data.viewers) {
                 const viewers = data.viewers;
                 
-                // Store server time for accurate relative time calculation
-                if (data.server_time) {
-                    const serverDate = new Date(data.server_time.replace(' ', 'T'));
-                    if (!isNaN(serverDate.getTime())) {
-                        window.viewerServerTimeMs = serverDate.getTime();
-                        window.viewerClientTimeAtFetch = Date.now();
-                    }
-                }
+                syncViewerClock(data.server_time_ms, data.server_time);
                 
                 // Update count badge
                 if (viewersCount) {
@@ -2000,7 +2279,8 @@ window.loadCardViewers = function(cardId) {
                             initials = nameParts[0].substring(0, 2).toUpperCase();
                         }
                         
-                        const timeAgo = formatViewerTime(viewer.last_viewed_at);
+                        const viewedMs = viewer.last_viewed_at_ms || parseUtcToMs(viewer.last_viewed_at);
+                        const timeAgo = formatViewerTimeMs(viewedMs);
                         const hasAvatar = viewer.avatar && viewer.avatar.trim() !== '' && viewer.avatar !== 'default-avatar.png';
                         
                         return `
@@ -2013,7 +2293,7 @@ window.loadCardViewers = function(cardId) {
                                 </div>
                                 <div class="viewer-info">
                                     <div class="viewer-name">${escapeHtml(viewer.name)}</div>
-                                    <div class="viewer-time">${timeAgo}</div>
+                                    <div class="viewer-time" data-viewed-ms="${viewedMs || ''}">${timeAgo}</div>
                                 </div>
                                 ${viewer.view_count > 1 
                                     ? `<span class="viewer-count">${viewer.view_count}x</span>`
@@ -2021,6 +2301,7 @@ window.loadCardViewers = function(cardId) {
                                 }
                             </div>`;
                     }).join('');
+                    startViewerTimeTicker();
                 }
             } else {
                 viewersList.innerHTML = `
@@ -2038,54 +2319,83 @@ window.loadCardViewers = function(cardId) {
         });
 };
 
-// Format viewer time (relative)
-function formatViewerTime(dateString) {
-    if (!dateString) return '';
-    
-    // Parse the date string
-    let date;
-    if (dateString.includes('T')) {
-        date = new Date(dateString);
-    } else if (dateString.includes(' ')) {
-        // MySQL format: "2025-12-26 10:30:00"
-        date = new Date(dateString.replace(' ', 'T'));
-    } else {
-        date = new Date(dateString);
+function parseUtcToMs(value) {
+    if (value == null || value === '') return NaN;
+    if (typeof value === 'number') return value;
+    let s = String(value).trim();
+    if (s.includes(' ') && !s.includes('T')) {
+        s = s.replace(' ', 'T') + 'Z';
+    } else if (/^\d{4}-\d{2}-\d{2}T/.test(s) && !/[zZ]$/.test(s) && !/[+-]\d{2}:?\d{2}$/.test(s)) {
+        s += 'Z';
     }
-    
-    // Check if date is valid
-    if (isNaN(date.getTime())) {
-        console.warn('Invalid date:', dateString);
-        return '';
+    return Date.parse(s);
+}
+
+function getViewerNowMs() {
+    if (window.viewerServerTimeMs != null && window.viewerClientTimeAtFetch != null) {
+        return window.viewerServerTimeMs + (Date.now() - window.viewerClientTimeAtFetch);
     }
-    
-    // Calculate "now" based on server time if available
-    let nowMs;
-    if (window.viewerServerTimeMs && window.viewerClientTimeAtFetch) {
-        // Adjust for time elapsed since we fetched server time
-        const elapsed = Date.now() - window.viewerClientTimeAtFetch;
-        nowMs = window.viewerServerTimeMs + elapsed;
-    } else {
-        nowMs = Date.now();
+    return Date.now();
+}
+
+function syncViewerClock(serverTimeMs, serverTimeUtc) {
+    let ms = typeof serverTimeMs === 'number' ? serverTimeMs : parseUtcToMs(serverTimeUtc);
+    if (!isNaN(ms)) {
+        window.viewerServerTimeMs = ms;
+        window.viewerClientTimeAtFetch = Date.now();
     }
-    
-    const diff = Math.floor((nowMs - date.getTime()) / 1000);
-    
-    // Handle future dates or negative diff (clock sync issues)
-    if (diff < 0) return '0 min ago';
-    
-    if (diff < 60) return '0 min ago';
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
+}
+
+function formatRelativeTimeMs(timestampMs, nowMs) {
+    if (timestampMs == null || isNaN(timestampMs)) return '';
+    const diff = Math.floor((nowMs - timestampMs) / 1000);
+    if (diff < 0) return 'just now';
+    if (diff < 60) return 'just now';
+    if (diff < 3600) {
+        const m = Math.floor(diff / 60);
+        return m === 1 ? '1 min ago' : `${m} min ago`;
+    }
+    if (diff < 86400) {
+        const h = Math.floor(diff / 3600);
+        return h === 1 ? '1 hr ago' : `${h} hr ago`;
+    }
     if (diff < 172800) return '1 day ago';
     if (diff < 604800) return `${Math.floor(diff / 86400)} days ago`;
-    
+    const date = new Date(timestampMs);
     const now = new Date(nowMs);
-    return date.toLocaleDateString('en-US', { 
-        month: 'short', 
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
         day: 'numeric',
-        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined 
+        year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
     });
+}
+
+function formatViewerTimeMs(timestampMs) {
+    return formatRelativeTimeMs(timestampMs, getViewerNowMs());
+}
+
+function refreshViewerTimeLabels() {
+    document.querySelectorAll('.viewer-time[data-viewed-ms]').forEach(el => {
+        const ms = parseInt(el.dataset.viewedMs, 10);
+        if (!isNaN(ms)) {
+            el.textContent = formatViewerTimeMs(ms);
+        }
+    });
+}
+
+let viewerTimeTicker = null;
+
+function startViewerTimeTicker() {
+    stopViewerTimeTicker();
+    refreshViewerTimeLabels();
+    viewerTimeTicker = setInterval(refreshViewerTimeLabels, 30000);
+}
+
+function stopViewerTimeTicker() {
+    if (viewerTimeTicker) {
+        clearInterval(viewerTimeTicker);
+        viewerTimeTicker = null;
+    }
 }
 
 // Toggle viewers dropdown
@@ -2096,9 +2406,10 @@ window.toggleViewersDropdown = function(event) {
         const isOpening = dropdown.classList.contains('hidden');
         dropdown.classList.toggle('hidden');
         
-        // If opening, reload viewers to get latest data
         if (isOpening && window.currentCardId) {
             loadCardViewers(window.currentCardId);
+        } else if (!isOpening) {
+            stopViewerTimeTicker();
         }
     }
 };
@@ -2109,7 +2420,10 @@ document.addEventListener('click', function(e) {
     const dropdown = document.getElementById('viewersDropdown');
     
     if (container && dropdown && !container.contains(e.target)) {
-        dropdown.classList.add('hidden');
+        if (!dropdown.classList.contains('hidden')) {
+            dropdown.classList.add('hidden');
+            stopViewerTimeTicker();
+        }
     }
 });
 
@@ -2119,6 +2433,7 @@ document.addEventListener('keydown', function(e) {
         const dropdown = document.getElementById('viewersDropdown');
         if (dropdown && !dropdown.classList.contains('hidden')) {
             dropdown.classList.add('hidden');
+            stopViewerTimeTicker();
         }
         // Close all action popups
         document.querySelectorAll('.action-popup').forEach(p => p.classList.add('hidden'));
@@ -2135,7 +2450,7 @@ document.addEventListener('click', function(e) {
 // =====================================================
 // LABELS FUNCTIONALITY
 // =====================================================
-let selectedLabelColor = '#6366f1';
+let selectedLabelColor = '#171717';
 
 window.toggleLabelsPopup = function() {
     const popup = document.getElementById('labelsPopup');
@@ -2376,138 +2691,534 @@ function formatDate(dateStr) {
 // =====================================================
 // CHECKLIST FUNCTIONALITY
 // =====================================================
-window.toggleChecklistPopup = function() {
-    const popup = document.getElementById('checklistPopup');
-    const wasHidden = popup.classList.contains('hidden');
-    document.querySelectorAll('.action-popup').forEach(p => p.classList.add('hidden'));
-    if (wasHidden) {
-        popup.classList.remove('hidden');
-        document.getElementById('newChecklistTitle').focus();
+window.cardChecklistFeatureEnabled = false;
+
+function setChecklistFeatureEnabled(enabled, { skipModal = false } = {}) {
+    window.cardChecklistFeatureEnabled = !!enabled;
+    const toggle = document.getElementById('checklistFeatureToggle');
+    if (toggle) {
+        toggle.setAttribute('aria-checked', window.cardChecklistFeatureEnabled ? 'true' : 'false');
     }
+    const section = document.getElementById('checklistsSection');
+    if (section) {
+        section.classList.toggle('hidden', !window.cardChecklistFeatureEnabled);
+    }
+    if (window.cardChecklistFeatureEnabled && !skipModal && window.cardChecklists.length === 0) {
+        showChecklistCreateModal();
+    }
+}
+
+function syncChecklistFeatureFromData() {
+    const hasChecklist = window.cardChecklists.length > 0;
+    setChecklistFeatureEnabled(hasChecklist, { skipModal: true });
+}
+
+window.toggleChecklistFeature = function() {
+    const next = !window.cardChecklistFeatureEnabled;
+    if (!next) {
+        setChecklistFeatureEnabled(false, { skipModal: true });
+        hideChecklistCreateModal();
+        return;
+    }
+    if (window.cardChecklists.length > 0) {
+        setChecklistFeatureEnabled(true, { skipModal: true });
+        return;
+    }
+    setChecklistFeatureEnabled(true, { skipModal: false });
+};
+
+window.showChecklistCreateModal = function() {
+    const modal = document.getElementById('checklistCreateModal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    const input = document.getElementById('newChecklistTitle');
+    if (input) {
+        input.value = input.value.trim() || 'Checklist';
+        setTimeout(() => input.focus(), 50);
+    }
+};
+
+window.hideChecklistCreateModal = function(cancelled) {
+    const modal = document.getElementById('checklistCreateModal');
+    if (modal) modal.classList.add('hidden');
+    if (cancelled && window.cardChecklists.length === 0) {
+        setChecklistFeatureEnabled(false, { skipModal: true });
+    }
+};
+
+// Local cache of checklists for the open card, so the UI can update
+// in place instead of re-rendering (and dropping focus) on every action.
+window.cardChecklists = [];
+
+function checklistPost(url, payload) {
+    return fetch((window.BASE_PATH || '') + url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json().catch(() => ({ success: false, message: 'Server returned an invalid response' })));
+}
+
+function findChecklist(checklistId) {
+    return window.cardChecklists.find(cl => cl.id === Number(checklistId));
+}
+
+window.expandChecklistAdd = function(checklistId) {
+    setChecklistDropdownOpen(checklistId, true);
+    rememberChecklistUiState(checklistId, { addFormOpen: true });
+    const block = document.getElementById(`checklist-${checklistId}`);
+    if (!block) return;
+    const trigger = block.querySelector('.checklist-add-trigger-row');
+    const form = block.querySelector('.checklist-add-form');
+    if (trigger) trigger.classList.add('hidden');
+    if (form) {
+        form.classList.remove('is-hidden');
+        const input = form.querySelector('.checklist-add-input');
+        if (input) input.focus();
+    }
+};
+
+window.collapseChecklistAdd = function(checklistId) {
+    rememberChecklistUiState(checklistId, { addFormOpen: false });
+    const block = document.getElementById(`checklist-${checklistId}`);
+    if (!block) return;
+    const trigger = block.querySelector('.checklist-add-trigger-row');
+    const form = block.querySelector('.checklist-add-form');
+    if (form) {
+        form.classList.add('is-hidden');
+        const input = form.querySelector('.checklist-add-input');
+        if (input) input.value = '';
+    }
+    if (trigger) trigger.classList.remove('hidden');
+};
+
+window.checklistUiState = window.checklistUiState || {};
+
+function rememberChecklistUiState(checklistId, patch) {
+    const id = String(checklistId);
+    window.checklistUiState[id] = Object.assign({}, window.checklistUiState[id] || {}, patch);
+}
+
+function captureChecklistDropdownState() {
+    const state = {};
+    document.querySelectorAll('.checklist-dropdown[data-checklist-id]').forEach(function (block) {
+        const id = block.dataset.checklistId;
+        if (!id) return;
+        const form = block.querySelector('.checklist-add-form');
+        state[id] = {
+            open: block.dataset.open === 'true',
+            addFormOpen: !!(form && !form.classList.contains('is-hidden')),
+        };
+    });
+    (window.cardChecklists || []).forEach(function (cl) {
+        const id = String(cl.id);
+        const remembered = window.checklistUiState[id];
+        if (remembered && state[id] === undefined) {
+            state[id] = { open: !!remembered.open, addFormOpen: !!remembered.addFormOpen };
+        } else if (remembered && state[id]) {
+            state[id].open = state[id].open || !!remembered.open;
+        }
+    });
+    return state;
+}
+
+function restoreChecklistDropdownState(state) {
+    if (!state) return;
+    Object.keys(state).forEach(function (id) {
+        const saved = state[id];
+        if (!saved) return;
+        setChecklistDropdownOpen(Number(id), !!saved.open);
+        if (!saved.open) return;
+        if (saved.addFormOpen) {
+            expandChecklistAdd(Number(id));
+        } else {
+            collapseChecklistAdd(Number(id));
+        }
+    });
+}
+
+window.setChecklistDropdownOpen = function(checklistId, open) {
+    const block = document.getElementById(`checklist-${checklistId}`);
+    const shouldOpen = !!open;
+    rememberChecklistUiState(checklistId, { open: shouldOpen });
+    if (!block) return;
+    const panel = block.querySelector('.checklist-dropdown-panel');
+    const trigger = block.querySelector('.checklist-dropdown-trigger');
+    block.classList.toggle('is-open', shouldOpen);
+    block.dataset.open = shouldOpen ? 'true' : 'false';
+    if (panel) panel.classList.toggle('is-collapsed', !shouldOpen);
+    if (trigger) trigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+};
+
+window.toggleChecklistDropdown = function(checklistId) {
+    const block = document.getElementById(`checklist-${checklistId}`);
+    if (!block) return;
+    const isOpen = block.dataset.open === 'true';
+    setChecklistDropdownOpen(checklistId, !isOpen);
 };
 
 window.createChecklist = function() {
     if (!window.currentCardId) return;
-    const title = document.getElementById('newChecklistTitle').value.trim() || 'Checklist';
-    
-    fetch((window.BASE_PATH || '') + '/actions/checklist/create.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ card_id: window.currentCardId, title })
-    })
-    .then(r => r.json())
+    if (window.cardChecklists.length > 0) {
+        showToast('This task already has a checklist.', 'error');
+        hideChecklistCreateModal();
+        return;
+    }
+    const titleInput = document.getElementById('newChecklistTitle');
+    const title = titleInput.value.trim() || 'Checklist';
+
+    checklistPost('/actions/checklist/create.php', { card_id: window.currentCardId, title })
     .then(data => {
-        if (data.success) {
-            loadChecklists();
-            toggleChecklistPopup();
-            document.getElementById('newChecklistTitle').value = 'Checklist';
+        if (data.success && data.checklist) {
+            window.cardChecklists.push(data.checklist);
+            setChecklistFeatureEnabled(true, { skipModal: true });
+            renderChecklists();
+            hideChecklistCreateModal();
+            if (titleInput) titleInput.value = 'Checklist';
             showToast('Checklist created', 'success');
+            setChecklistDropdownOpen(data.checklist.id, true);
+            expandChecklistAdd(data.checklist.id);
         } else {
-            showToast(data.message || 'Failed', 'error');
+            showToast(data.message || 'Could not create checklist', 'error');
         }
-    });
+    })
+    .catch(() => showToast('Could not create checklist', 'error'));
 };
 
 window.loadChecklists = function() {
     if (!window.currentCardId) return Promise.resolve();
-    const container = document.getElementById('checklistsContainer');
-    
+
+    if (window._checklistUiStateCardId !== window.currentCardId) {
+        window.checklistUiState = {};
+        window._checklistUiStateCardId = window.currentCardId;
+    }
+
+    window.cardChecklists = [];
+    if (typeof setChecklistFeatureEnabled === 'function') {
+        setChecklistFeatureEnabled(false, { skipModal: true });
+    }
+    hideChecklistCreateModal();
+
     return fetch(`${window.BASE_PATH || ''}/actions/checklist/get.php?card_id=${window.currentCardId}`)
         .then(r => r.json())
         .then(data => {
-            if (data.success && data.checklists.length > 0) {
-                container.innerHTML = data.checklists.map(cl => {
-                    const progress = cl.total > 0 ? Math.round((cl.completed / cl.total) * 100) : 0;
-                    return `
-                    <div class="mb-4" id="checklist-${cl.id}">
-                        <div class="flex items-center justify-between mb-2">
-                            <div class="flex items-center gap-2">
-                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-                                <span class="text-sm font-medium text-gray-700 dark:text-gray-300">${escapeHtml(cl.title)}</span>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <span class="text-xs text-gray-500">${cl.completed}/${cl.total}</span>
-                                <button onclick="deleteChecklist(${cl.id})" class="text-gray-400 hover:text-red-500 text-xs">Delete</button>
-                            </div>
-                        </div>
-                        <div class="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full mb-3">
-                            <div class="h-full bg-green-500 rounded-full transition-all" style="width: ${progress}%"></div>
-                        </div>
-                        <div class="space-y-1 pl-6" id="checklist-items-${cl.id}">
-                            ${cl.items.map(item => `
-                                <div class="flex items-center gap-2 group py-1">
-                                    <input type="checkbox" ${item.is_completed ? 'checked' : ''} onchange="toggleChecklistItem(${item.id})" class="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary">
-                                    <span class="flex-1 text-sm ${item.is_completed ? 'line-through text-gray-400' : 'text-gray-700 dark:text-gray-300'}">${escapeHtml(item.title)}</span>
-                                    <button onclick="deleteChecklistItem(${item.id}, ${cl.id})" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 text-xs">×</button>
-                                </div>
-                            `).join('')}
-                        </div>
-                        <div class="pl-6 mt-2">
-                            <input type="text" placeholder="Add an item" onkeypress="if(event.key==='Enter')addChecklistItem(${cl.id}, this)" class="w-full px-2 py-1.5 text-sm border border-gray-200 dark:border-gray-600 rounded dark:bg-gray-700 dark:text-white">
-                        </div>
-                    </div>`;
-                }).join('');
-            } else {
-                container.innerHTML = '';
-            }
+            window.cardChecklists = (data.success && Array.isArray(data.checklists)) ? data.checklists : [];
+            renderChecklists();
+            syncChecklistFeatureFromData();
+        })
+        .catch(err => {
+            console.error('Checklist load failed:', err);
+            window.cardChecklists = [];
+            renderChecklists();
+            syncChecklistFeatureFromData();
         });
 };
 
+function renderChecklistItem(cl, item) {
+    return `
+        <div class="checklist-item flex items-center gap-2 group py-1.5 rounded-md px-2 hover:bg-gray-100/80 dark:hover:bg-gray-900/50 transition-colors"
+             data-item-id="${item.id}"
+             role="button"
+             tabindex="0"
+             title="${item.is_completed ? 'Mark incomplete' : 'Mark complete'}"
+             onclick="handleChecklistRowClick(event, ${item.id}, ${cl.id})"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();handleChecklistRowClick(event,${item.id},${cl.id});}"
+             onmousedown="event.stopPropagation()">
+            <span class="checklist-item-check shrink-0" aria-hidden="true">
+                <input type="checkbox" ${item.is_completed ? 'checked' : ''}
+                       class="checklist-item-checkbox"
+                       tabindex="-1"
+                       aria-hidden="true">
+                <span class="checklist-item-check-box">
+                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </span>
+            </span>
+            <span class="checklist-item-title flex-1 min-w-0 text-[13px] leading-snug ${item.is_completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-100'}">${escapeHtml(item.title)}</span>
+            <button type="button" onclick="event.stopPropagation(); deleteChecklistItem(${item.id}, ${cl.id})"
+                    class="checklist-item-delete opacity-0 group-hover:opacity-100 focus:opacity-100 text-gray-400 hover:text-red-500 p-0.5 rounded transition-opacity shrink-0 cursor-pointer"
+                    title="Remove item" aria-label="Remove item">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+        </div>`;
+}
+
+window.handleChecklistRowClick = function(event, itemId, checklistId) {
+    if (event.target.closest('.checklist-item-delete')) return;
+    const row = event.currentTarget;
+    const checkbox = row.querySelector('.checklist-item-checkbox');
+    if (!checkbox || checkbox.disabled) return;
+    checkbox.checked = !checkbox.checked;
+    toggleChecklistItem(itemId, checklistId, checkbox);
+};
+
+function renderChecklistBlock(cl) {
+    const total = cl.items.length;
+    const completed = cl.items.filter(i => i.is_completed).length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    return `
+        <div class="checklist-card checklist-block checklist-dropdown" id="checklist-${cl.id}" data-checklist-id="${cl.id}" data-open="false">
+            <button type="button" class="checklist-dropdown-trigger" onclick="toggleChecklistDropdown(${cl.id})" aria-expanded="false" aria-controls="checklist-panel-${cl.id}">
+                <svg class="checklist-dropdown-chevron w-4 h-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                <svg class="w-4 h-4 shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                <span class="flex-1 min-w-0 text-sm font-semibold text-gray-900 dark:text-white truncate">${escapeHtml(cl.title)}</span>
+                <span class="checklist-progress-text text-xs font-semibold tabular-nums text-gray-500 dark:text-gray-400 shrink-0">${completed}/${total}</span>
+            </button>
+            <div id="checklist-panel-${cl.id}" class="checklist-dropdown-panel is-collapsed" onclick="event.stopPropagation()">
+                <div class="checklist-progress-track bg-gray-200 dark:bg-gray-700 rounded-full mt-3 mb-3 overflow-hidden">
+                    <div class="checklist-progress-bar h-full rounded-full transition-all duration-300 ${progress === 100 ? 'bg-green-500' : 'bg-primary'}" style="width: ${progress}%"></div>
+                </div>
+                <div class="checklist-items space-y-0.5 mb-1" id="checklist-items-${cl.id}">
+                    ${cl.items.map(item => renderChecklistItem(cl, item)).join('')}
+                </div>
+                <div class="checklist-add-wrap" data-checklist-id="${cl.id}">
+                    <button type="button" class="checklist-add-trigger-row" onclick="expandChecklistAdd(${cl.id})">
+                        <svg class="w-3.5 h-3.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        Add an item
+                    </button>
+                    <form class="checklist-add-form is-hidden" onsubmit="event.preventDefault(); addChecklistItem(${cl.id}, this.querySelector('.checklist-add-input'));">
+                        <button type="submit" class="checklist-add-icon-btn checklist-add-btn" title="Add item" aria-label="Add item">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                        </button>
+                        <input type="text" placeholder="Add an item…" autocomplete="off" data-no-ai-assist
+                               class="checklist-add-input text-gray-800 dark:text-gray-100 placeholder-gray-400">
+                        <button type="button" class="checklist-add-cancel-btn" onclick="collapseChecklistAdd(${cl.id})">Cancel</button>
+                    </form>
+                </div>
+                <div class="mt-3 pt-2 border-t border-gray-200/80 dark:border-gray-600/80 flex justify-end">
+                    <button type="button" onclick="deleteChecklist(${cl.id})"
+                            class="inline-flex items-center gap-1.5 px-2 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 rounded-md hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                            title="Remove checklist">
+                        <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
+
+function renderChecklists() {
+    const container = document.getElementById('checklistsContainer');
+    if (!container) return;
+    if (!window.cardChecklists.length) {
+        container.innerHTML = '';
+        return;
+    }
+    const savedDropdownState = captureChecklistDropdownState();
+    container.innerHTML = window.cardChecklists.map(renderChecklistBlock).join('');
+    restoreChecklistDropdownState(savedDropdownState);
+}
+
+function refreshChecklistProgress(cl) {
+    const block = document.getElementById(`checklist-${cl.id}`);
+    if (!block) return;
+    const total = cl.items.length;
+    const completed = cl.items.filter(i => i.is_completed).length;
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const text = block.querySelector('.checklist-progress-text');
+    const bar = block.querySelector('.checklist-progress-bar');
+    if (text) text.textContent = `${completed}/${total}`;
+    if (bar) {
+        bar.style.width = `${progress}%`;
+        bar.classList.toggle('bg-green-500', progress === 100);
+        bar.classList.toggle('bg-primary', progress !== 100);
+    }
+}
+
 window.addChecklistItem = function(checklistId, input) {
+    if (!input) return;
+    markChecklistLocalEdit();
     const title = input.value.trim();
-    if (!title) return;
-    
-    fetch((window.BASE_PATH || '') + '/actions/checklist/item.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create', checklist_id: checklistId, title })
-    })
-    .then(r => r.json())
+    if (!title) {
+        input.focus();
+        return;
+    }
+    const cl = findChecklist(checklistId);
+    const form = input.closest('form');
+    const submitBtn = form ? form.querySelector('.checklist-add-btn') : null;
+    input.disabled = true;
+    if (submitBtn) submitBtn.disabled = true;
+
+    checklistPost('/actions/checklist/item.php', { action: 'create', checklist_id: Number(checklistId), title })
     .then(data => {
-        if (data.success) {
+        if (data.success && data.item) {
+            data.item.is_completed = !!data.item.is_completed;
+            if (cl) {
+                cl.items.push(data.item);
+                const list = document.getElementById(`checklist-items-${cl.id}`);
+                if (list) list.insertAdjacentHTML('beforeend', renderChecklistItem(cl, data.item));
+                refreshChecklistProgress(cl);
+            } else {
+                loadChecklists();
+            }
             input.value = '';
-            loadChecklists();
+            if (submitBtn) submitBtn.disabled = false;
+            input.disabled = false;
+            input.focus();
+        } else {
+            showToast(data.message || 'Could not add item', 'error');
         }
+    })
+    .catch(() => showToast('Could not add item', 'error'))
+    .finally(() => {
+        input.disabled = false;
+        if (submitBtn) submitBtn.disabled = false;
     });
 };
 
-window.toggleChecklistItem = function(itemId) {
-    fetch((window.BASE_PATH || '') + '/actions/checklist/item.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'toggle', item_id: itemId })
-    })
-    .then(r => r.json())
+window.markChecklistLocalEdit = function() {
+    window._planifyChecklistLocalEditUntil = Date.now() + 2000;
+};
+
+window.toggleChecklistItem = function(itemId, checklistId, checkbox) {
+    markChecklistLocalEdit();
+    const cl = findChecklist(checklistId);
+    const item = cl ? cl.items.find(i => i.id === Number(itemId)) : null;
+    const row = checkbox ? checkbox.closest('.checklist-item') : null;
+    const titleEl = row ? row.querySelector('.checklist-item-title') : null;
+
+    const applyState = (completed) => {
+        if (item) item.is_completed = completed;
+        if (checkbox) checkbox.checked = completed;
+        if (titleEl) {
+            titleEl.classList.toggle('line-through', completed);
+            titleEl.classList.toggle('text-gray-400', completed);
+            titleEl.classList.toggle('dark:text-gray-500', completed);
+            titleEl.classList.toggle('text-gray-800', !completed);
+            titleEl.classList.toggle('dark:text-gray-100', !completed);
+        }
+        if (cl) refreshChecklistProgress(cl);
+    };
+
+    const previous = item ? !!item.is_completed : !(checkbox && checkbox.checked);
+    applyState(!previous);
+    if (checkbox) checkbox.disabled = true;
+
+    checklistPost('/actions/checklist/item.php', { action: 'toggle', item_id: Number(itemId) })
     .then(data => {
-        if (data.success) loadChecklists();
-    });
+        if (data.success) {
+            applyState(!!data.is_completed);
+        } else {
+            applyState(previous);
+            showToast(data.message || 'Could not update item', 'error');
+        }
+    })
+    .catch(() => {
+        applyState(previous);
+        showToast('Could not update item', 'error');
+    })
+    .finally(() => { if (checkbox) checkbox.disabled = false; });
 };
 
 window.deleteChecklistItem = function(itemId, checklistId) {
-    fetch((window.BASE_PATH || '') + '/actions/checklist/item.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'delete', item_id: itemId })
-    })
-    .then(r => r.json())
+    const cl = findChecklist(checklistId);
+    const row = document.querySelector(`#checklist-${checklistId} .checklist-item[data-item-id="${itemId}"]`);
+    if (row) row.style.opacity = '0.4';
+
+    checklistPost('/actions/checklist/item.php', { action: 'delete', item_id: Number(itemId) })
     .then(data => {
-        if (data.success) loadChecklists();
+        if (data.success) {
+            if (cl) cl.items = cl.items.filter(i => i.id !== Number(itemId));
+            if (row) row.remove();
+            if (cl) refreshChecklistProgress(cl);
+        } else {
+            if (row) row.style.opacity = '';
+            showToast(data.message || 'Could not remove item', 'error');
+        }
+    })
+    .catch(() => {
+        if (row) row.style.opacity = '';
+        showToast('Could not remove item', 'error');
     });
 };
 
 window.deleteChecklist = function(checklistId) {
-    if (!confirm('Delete this checklist?')) return;
-    fetch((window.BASE_PATH || '') + '/actions/checklist/delete.php', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ checklist_id: checklistId })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.success) {
-            loadChecklists();
-            showToast('Checklist deleted', 'success');
+    const cl = findChecklist(checklistId);
+    const itemCount = cl ? cl.items.length : 0;
+    planifyConfirm({
+        title: 'Delete checklist?',
+        message: cl
+            ? `"${cl.title}"${itemCount ? ` and its ${itemCount} item${itemCount === 1 ? '' : 's'}` : ''} will be removed from this task.`
+            : 'This checklist will be removed from this task.',
+        confirmLabel: 'Delete',
+        danger: true
+    }).then(ok => {
+        if (!ok) return;
+        checklistPost('/actions/checklist/delete.php', { checklist_id: Number(checklistId) })
+        .then(data => {
+            if (data.success) {
+                window.cardChecklists = window.cardChecklists.filter(c => c.id !== Number(checklistId));
+                renderChecklists();
+                setChecklistFeatureEnabled(false, { skipModal: true });
+                showToast('Checklist deleted', 'success');
+            } else {
+                showToast(data.message || 'Could not delete checklist', 'error');
+            }
+        })
+        .catch(() => showToast('Could not delete checklist', 'error'));
+    });
+};
+
+// =====================================================
+// IN-APP CONFIRM DIALOG (replaces browser confirm())
+// =====================================================
+window.planifyConfirm = function({ title = 'Are you sure?', message = '', confirmLabel = 'Confirm', cancelLabel = 'Cancel', danger = false } = {}) {
+    return new Promise(resolve => {
+        let overlay = document.getElementById('planifyConfirmModal');
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = 'planifyConfirmModal';
+            overlay.className = 'fixed inset-0 bg-black/50 dark:bg-black/70 z-[270] flex items-center justify-center p-4 hidden';
+            overlay.innerHTML = `
+                <div class="bg-white dark:bg-gray-800 rounded-xl w-full max-w-md shadow-2xl">
+                    <div class="p-6">
+                        <div id="planifyConfirmIcon" class="flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full"></div>
+                        <h3 id="planifyConfirmTitle" class="text-lg font-semibold text-center text-gray-900 dark:text-white mb-2"></h3>
+                        <p id="planifyConfirmMessage" class="text-sm text-center text-gray-500 dark:text-gray-400 mb-6"></p>
+                        <div class="flex gap-3">
+                            <button type="button" id="planifyConfirmCancel" class="flex-1 px-4 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"></button>
+                            <button type="button" id="planifyConfirmOk" class="flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors"></button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
         }
+
+        const iconWrap = overlay.querySelector('#planifyConfirmIcon');
+        const okBtn = overlay.querySelector('#planifyConfirmOk');
+        const cancelBtn = overlay.querySelector('#planifyConfirmCancel');
+
+        overlay.querySelector('#planifyConfirmTitle').textContent = title;
+        overlay.querySelector('#planifyConfirmMessage').textContent = message;
+        okBtn.textContent = confirmLabel;
+        cancelBtn.textContent = cancelLabel;
+        iconWrap.className = 'flex items-center justify-center w-12 h-12 mx-auto mb-4 rounded-full ' +
+            (danger ? 'bg-red-100 dark:bg-red-900/30' : 'bg-neutral-100 dark:bg-neutral-700');
+        iconWrap.innerHTML = danger
+            ? '<svg class="w-6 h-6 text-red-600 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>'
+            : '<svg class="w-6 h-6 text-neutral-800 dark:text-neutral-100" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>';
+        okBtn.className = 'flex-1 px-4 py-2.5 text-sm font-medium text-white rounded-lg transition-colors ' +
+            (danger ? 'bg-red-600 hover:bg-red-700' : 'bg-neutral-900 hover:bg-neutral-800');
+
+        const close = (result) => {
+            overlay.classList.add('hidden');
+            okBtn.onclick = null;
+            cancelBtn.onclick = null;
+            overlay.onclick = null;
+            document.removeEventListener('keydown', onKey, true);
+            resolve(result);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.stopPropagation(); close(false); }
+            if (e.key === 'Enter') { e.stopPropagation(); close(true); }
+        };
+
+        okBtn.onclick = () => close(true);
+        cancelBtn.onclick = () => close(false);
+        overlay.onclick = (e) => { if (e.target === overlay) close(false); };
+        document.addEventListener('keydown', onKey, true);
+
+        overlay.classList.remove('hidden');
+        okBtn.focus();
     });
 };
 
@@ -2540,16 +3251,16 @@ window.loadMembers = function() {
                         const initials = getInitials(member.name);
                         const hasAvatar = member.avatar && member.avatar !== 'default-avatar.png';
                         return `
-                        <div class="flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer" onclick="toggleMember(${member.id})">
+                        <div class="relative flex items-center gap-3 p-2 hover:bg-gray-50 dark:hover:bg-gray-700 rounded cursor-pointer" data-member-id="${member.id}" onclick="toggleMember(${member.id})">
                             ${hasAvatar 
                                 ? `<img src="${window.BASE_PATH || ''}/assets/uploads/avatars/${member.avatar}" class="w-8 h-8 rounded-full object-cover">`
                                 : `<div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-white text-xs font-semibold">${initials}</div>`
                             }
-                            <div class="flex-1">
-                                <div class="text-sm font-medium text-gray-800 dark:text-white">${escapeHtml(member.name)}</div>
-                                <div class="text-xs text-gray-500">${member.role}</div>
+                            <div class="flex-1 min-w-0">
+                                <div class="text-sm font-medium text-gray-800 dark:text-white truncate">${escapeHtml(member.name)}</div>
+                                <div class="text-xs text-gray-500">${escapeHtml(member.role || '')}</div>
                             </div>
-                            ${member.assigned ? '<svg class="w-5 h-5 text-primary" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>' : ''}
+                            <svg class="member-check w-5 h-5 text-primary ${member.assigned ? '' : 'hidden'}" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>
                         </div>`;
                     }).join('');
                 }
@@ -2559,7 +3270,14 @@ window.loadMembers = function() {
 };
 
 window.toggleMember = function(userId) {
-    if (!window.currentCardId) return;
+    if (!window.currentCardId || window.memberAssigning) return;
+    const row = document.querySelector('#membersList [data-member-id="' + userId + '"]');
+    const check = row ? row.querySelector('.member-check') : null;
+    const wasAssigned = check ? !check.classList.contains('hidden') : false;
+    window.memberAssigning = true;
+    setMemberAssigning(true, row);
+    if (check) check.classList.toggle('hidden', wasAssigned);
+
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
     fetch((window.BASE_PATH || '') + '/actions/card/assignees.php', {
         method: 'POST',
@@ -2571,17 +3289,38 @@ window.toggleMember = function(userId) {
     })
     .then(r => r.json())
     .then(data => {
-        if (data.success) {
-            loadMembers();
-            // Update card display on board
-            if (typeof window.updateCardAssignees === 'function') {
-                window.updateCardAssignees(window.currentCardId);
-            }
-        } else {
-            showToast(data.message || 'Failed', 'error');
+        if (!data.success) {
+            if (check) check.classList.toggle('hidden', !wasAssigned);
+            showToast(data.message || 'Could not update the assignment', 'error');
+            return;
         }
+        const assignedIds = new Set((data.assignees || []).map(person => Number(person.id)));
+        document.querySelectorAll('#membersList [data-member-id]').forEach(item => {
+            const mark = item.querySelector('.member-check');
+            if (mark) mark.classList.toggle('hidden', !assignedIds.has(Number(item.dataset.memberId)));
+        });
+        updateCardAssigneesDisplay(data.assignees || []);
+        if (typeof window.updateCardAssignees === 'function') {
+            window.updateCardAssignees(window.currentCardId, data.assignees || []);
+        }
+    })
+    .catch(() => {
+        if (check) check.classList.toggle('hidden', !wasAssigned);
+        showToast('Could not update the assignment', 'error');
+    })
+    .finally(() => {
+        window.memberAssigning = false;
+        setMemberAssigning(false, row);
     });
 };
+
+function setMemberAssigning(active, row) {
+    const bar = document.getElementById('memberAssignBar');
+    if (bar) bar.classList.toggle('hidden', !active);
+    if (!row) return;
+    row.classList.toggle('pointer-events-none', active);
+    row.classList.toggle('opacity-70', active);
+}
 
 window.updateCardAssigneesDisplay = function(assignees) {
     const section = document.getElementById('cardAssigneesSection');
@@ -2750,8 +3489,9 @@ window.loadAttachments = function() {
         });
 };
 
-window.deleteAttachment = function(attachmentId) {
-    if (!confirm('Delete this attachment?')) return;
+window.deleteAttachment = async function(attachmentId) {
+    const ok = await planifyConfirm({ title: 'Delete attachment?', message: 'This file or link will be removed from the task.', confirmLabel: 'Delete', danger: true });
+    if (!ok) return;
     fetch((window.BASE_PATH || '') + '/actions/attachment/delete.php', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2771,8 +3511,8 @@ window.deleteAttachment = function(attachmentId) {
 // =====================================================
 // Override loadCardDetails to also load new features
 const originalLoadCardDetails = window.loadCardDetails;
-window.loadCardDetails = function(cardId) {
-    originalLoadCardDetails(cardId);
+window.loadCardDetails = function(cardId, options) {
+    originalLoadCardDetails(cardId, options);
     
     // Load additional data in parallel (no delay needed)
     Promise.all([

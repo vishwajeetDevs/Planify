@@ -72,8 +72,6 @@ try {
                 WHEN 'owner' THEN 1 
                 WHEN 'admin' THEN 2 
                 WHEN 'member' THEN 3 
-                WHEN 'commenter' THEN 4
-                WHEN 'viewer' THEN 5 
             END,
             u.name ASC
     ");

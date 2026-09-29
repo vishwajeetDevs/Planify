@@ -38,17 +38,10 @@ define('PASSWORD_RESET_EXPIRY_HOURS', env('PASSWORD_RESET_EXPIRY_HOURS', 1)); //
 // =============================================================================
 // APPLICATION URL (from db.php or .env)
 // =============================================================================
-// APP_URL is defined in db.php, but we provide a fallback here
+// APP_URL is defined in db.php. Fall back to the same .env resolver if email
+// config is loaded on its own.
 if (!defined('APP_URL')) {
-    $httpHost = $_SERVER['HTTP_HOST'] ?? '';
-    $isLocal = in_array($httpHost, ['localhost', '127.0.0.1']) 
-               || strpos($httpHost, 'localhost:') === 0;
-
-    if ($isLocal) {
-        define('APP_URL', 'http://localhost/planify');
-    } else {
-        define('APP_URL', 'https://planify-task.great-site.net');
-    }
+    define('APP_URL', planify_resolve_app_urls()['APP_URL']);
 }
 
 // APP_NAME fallback

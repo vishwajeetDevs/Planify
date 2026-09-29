@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS users (
     avatar VARCHAR(255) DEFAULT NULL,
     bio TEXT DEFAULT NULL,
     theme ENUM('light', 'dark', 'system') DEFAULT 'light',
-    theme_color VARCHAR(20) DEFAULT 'purple',
+    theme_color VARCHAR(20) DEFAULT 'mono',
     email_verified_at TIMESTAMP NULL DEFAULT NULL,
     remember_token VARCHAR(100) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -57,12 +57,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
     INDEX idx_workspace_owner (owner_id)
 ) ENGINE=InnoDB;
 
+-- Membership roles: owner = Super Admin, admin = Admin, member = Member
 -- Workspace members table
 CREATE TABLE IF NOT EXISTS workspace_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
     workspace_id INT NOT NULL,
     user_id INT NOT NULL,
-    role ENUM('owner', 'admin', 'member', 'viewer') DEFAULT 'member',
+    role ENUM('owner', 'admin', 'member') DEFAULT 'member',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -95,7 +96,7 @@ CREATE TABLE IF NOT EXISTS board_members (
     id INT AUTO_INCREMENT PRIMARY KEY,
     board_id INT NOT NULL,
     user_id INT NOT NULL,
-    role ENUM('owner', 'admin', 'member', 'commenter', 'viewer') DEFAULT 'member',
+    role ENUM('owner', 'admin', 'member') DEFAULT 'member',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE,
@@ -343,7 +344,7 @@ CREATE TABLE IF NOT EXISTS share_links (
     board_id INT NOT NULL,
     owner_id INT NOT NULL,
     token_hash VARCHAR(128) NOT NULL,
-    role_on_join ENUM('viewer', 'commenter', 'member') DEFAULT 'viewer',
+    role_on_join ENUM('admin', 'member') DEFAULT 'member',
     access_type ENUM('view_only', 'join_on_click', 'invite_only') DEFAULT 'join_on_click',
     max_uses INT DEFAULT NULL,
     uses INT DEFAULT 0,
@@ -564,6 +565,30 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     INDEX idx_board_time (board_id, created_at),
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ============================================================
+-- REALTIME SYNC
+-- Change log read by the live-update stream. Triggers that fill it
+-- are installed by database/realtime.sql.
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS realtime_events (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+    board_id INT NULL,
+    workspace_id INT NULL,
+    card_id INT NULL,
+    target_user_id INT NULL,
+    actor_id INT NULL,
+    entity_type VARCHAR(32) NOT NULL,
+    entity_id INT NULL,
+    action VARCHAR(16) NOT NULL,
+    summary VARCHAR(255) NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_rt_board (board_id, id),
+    KEY idx_rt_workspace (workspace_id, id),
+    KEY idx_rt_target (target_user_id, id)
 ) ENGINE=InnoDB;
 
 -- ============================================================

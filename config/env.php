@@ -316,3 +316,69 @@ function env(string $key, mixed $default = null): mixed
     return Env::get($key, $default);
 }
 
+/**
+ * Resolve the public application root from .env.
+ *
+ * APP_URL is the origin (scheme + host [+ port]), for example
+ * http://192.168.2.242 or https://example.com. A path already present
+ * on APP_URL is kept when APP_BASE_PATH is not set.
+ *
+ * APP_BASE_PATH is the folder the app is served from (/planify locally
+ * and on the LAN, empty when the app is at the domain root).
+ *
+ * @return array{APP_URL: string, BASE_PATH: string, BASE_URL: string}
+ */
+function planify_resolve_app_urls(): array
+{
+    $configured = rtrim((string) Env::get('APP_URL', ''), '/');
+
+    $origin = '';
+    $configuredPath = '';
+    if ($configured !== '') {
+        $parts = parse_url($configured);
+        if (is_array($parts) && !empty($parts['host'])) {
+            $scheme = $parts['scheme'] ?? 'http';
+            $origin = $scheme . '://' . $parts['host'];
+            if (!empty($parts['port'])) {
+                $origin .= ':' . $parts['port'];
+            }
+            $configuredPath = isset($parts['path']) ? rtrim((string) $parts['path'], '/') : '';
+            if ($configuredPath === '/') {
+                $configuredPath = '';
+            }
+        } else {
+            $origin = $configured;
+        }
+    }
+
+    if (Env::has('APP_BASE_PATH')) {
+        $basePath = rtrim((string) Env::get('APP_BASE_PATH', ''), '/');
+    } elseif ($configuredPath !== '') {
+        $basePath = $configuredPath;
+    } elseif (Env::get('APP_ENV', 'production') === 'production') {
+        $basePath = '';
+    } else {
+        $basePath = '/planify';
+    }
+
+    if ($basePath !== '' && $basePath[0] !== '/') {
+        $basePath = '/' . $basePath;
+    }
+
+    if ($origin === '') {
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (isset($_SERVER['SERVER_PORT']) && (string) $_SERVER['SERVER_PORT'] === '443');
+        $scheme = $https ? 'https' : 'http';
+        $host = $_SERVER['HTTP_HOST'] ?? '127.0.0.1';
+        $origin = $scheme . '://' . $host;
+    }
+
+    $appUrl = $origin . $basePath;
+
+    return [
+        'APP_URL' => $appUrl,
+        'BASE_PATH' => $basePath,
+        'BASE_URL' => $appUrl . '/public',
+    ];
+}
+

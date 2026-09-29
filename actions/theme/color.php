@@ -19,13 +19,13 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 }
 
 $input = json_decode(file_get_contents('php://input'), true);
-$themeColor = $input['theme_color'] ?? 'purple';
+$themeColor = $input['theme_color'] ?? 'mono';
 $userId = $_SESSION['user_id'];
 
 // Valid theme colors
 $validColors = [
-    'indigo', 'blue', 'purple', 'pink', 'rose', 'red', 
-    'orange', 'amber', 'green', 'emerald', 'teal', 'cyan', 'slate'
+    'mono', 'slate', 'indigo', 'blue', 'purple', 'pink', 'rose', 'red', 
+    'orange', 'amber', 'green', 'emerald', 'teal', 'cyan'
 ];
 
 if (!in_array($themeColor, $validColors)) {

@@ -166,9 +166,14 @@ function sendTaskMovedNotifications($conn, $cardId, $actorId, $taskTitle, $oldLi
         $actorName = $actorResult ? $actorResult['name'] : 'Someone';
         $stmt->close();
         
-        // Build task URL with encrypted ID (optional - for "View Task" button in email)
-        $basePath = defined('BASE_PATH') ? BASE_PATH : '';
-        $taskUrl = (defined('APP_URL') ? APP_URL : '') . "/public/board.php?ref=" . encryptId($boardId);
+        $listStmt = $conn->prepare('SELECT list_id FROM cards WHERE id = ?');
+        $listStmt->bind_param('i', $cardId);
+        $listStmt->execute();
+        $listRow = $listStmt->get_result()->fetch_assoc();
+        $listStmt->close();
+        $listId = $listRow ? (int) $listRow['list_id'] : null;
+
+        $taskUrl = taskPageUrl($boardId, $cardId, $listId);
         
         // Include MailHelper and send notifications
         require_once dirname(__DIR__) . '/../src/MailHelper.php';

@@ -128,10 +128,12 @@ try {
         $stmt = $conn->prepare("
             INSERT INTO join_requests (share_link_id, board_id, user_id, status)
             VALUES (?, ?, ?, 'pending')
-            ON DUPLICATE KEY UPDATE status = 'pending', created_at = NOW()
+            ON DUPLICATE KEY UPDATE status = 'pending', created_at = NOW(), handled_by = NULL, handled_at = NULL
         ");
         $stmt->bind_param("iii", $shareLink['id'], $shareLink['board_id'], $userId);
-        $stmt->execute();
+        if (!$stmt->execute()) {
+            throw new Exception('Could not save the access request');
+        }
         
         // Log the usage
         $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
@@ -149,31 +151,48 @@ try {
         $stmt->execute();
         $requester = $stmt->get_result()->fetch_assoc();
         
+        $requestedRole = in_array($shareLink['role_on_join'], ['admin', 'member'], true) ? $shareLink['role_on_join'] : 'member';
         $notificationData = json_encode([
-            'board_id' => $shareLink['board_id'],
-            'user_id' => $userId,
-            'share_link_id' => $shareLink['id']
+            'board_id' => (int) $shareLink['board_id'],
+            'user_id' => (int) $userId,
+            'share_link_id' => (int) $shareLink['id'],
+            'role' => $requestedRole,
+            'open' => 'requests'
         ]);
         
         $stmt = $conn->prepare("
-            INSERT INTO notifications (user_id, type, title, message, data)
-            VALUES (?, 'join_request', 'New Join Request', ?, ?)
+            SELECT user_id FROM board_members
+            WHERE board_id = ? AND role IN ('owner', 'admin') AND user_id <> ?
         ");
-        $message = $requester['name'] . ' has requested to join your board "' . $shareLink['board_name'] . '"';
-        $stmt->bind_param("iss", $shareLink['owner_id'], $message, $notificationData);
+        $stmt->bind_param("ii", $shareLink['board_id'], $userId);
         $stmt->execute();
+        $reviewers = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        if (!$reviewers) {
+            $reviewers = [['user_id' => $shareLink['owner_id']]];
+        }
+        
+        $stmt = $conn->prepare("
+            INSERT INTO notifications (user_id, type, title, message, data)
+            VALUES (?, 'join_request', 'Access Request', ?, ?)
+        ");
+        $message = $requester['name'] . ' requested access to "' . $shareLink['board_name'] . '" as ' . roleLabel($requestedRole);
+        foreach ($reviewers as $reviewer) {
+            $reviewerId = (int) $reviewer['user_id'];
+            $stmt->bind_param("iss", $reviewerId, $message, $notificationData);
+            $stmt->execute();
+        }
         
         $conn->commit();
         
         jsonResponse([
             'success' => true,
-            'message' => 'Your request to join has been sent to the board owner',
+            'message' => 'Your access request was sent to the Super Admin and Admins',
             'request_sent' => true,
             'board_name' => $shareLink['board_name']
         ]);
     } else {
         // For view_only and join_on_click, add user as member directly
-        $role = $shareLink['role_on_join'];
+        $role = in_array($shareLink['role_on_join'], ['admin', 'member'], true) ? $shareLink['role_on_join'] : 'member';
         
         $stmt = $conn->prepare("
             INSERT INTO board_members (board_id, user_id, role)
@@ -192,7 +211,7 @@ try {
         
         $stmt = $conn->prepare("
             INSERT IGNORE INTO workspace_members (workspace_id, user_id, role)
-            VALUES (?, ?, 'viewer')
+            VALUES (?, ?, 'member')
         ");
         $stmt->bind_param("ii", $board['workspace_id'], $userId);
         $stmt->execute();

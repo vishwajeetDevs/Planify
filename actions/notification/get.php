@@ -8,6 +8,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once '../../config/db.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/NotificationHelper.php';
+require_once '../../helpers/IdEncrypt.php';
 
 if (!isset($_SESSION['user_id'])) {
     http_response_code(401);
@@ -31,7 +32,26 @@ try {
     foreach ($notifications as &$notification) {
         $notification['time_ago'] = timeAgo($notification['created_at']);
         $notification['formatted_date'] = date('M j, Y g:i A', strtotime($notification['created_at']));
+
+        $payload = $notification['data'];
+        if (is_string($payload)) {
+            $payload = json_decode($payload, true);
+        }
+        if (is_array($payload) && !empty($payload['board_id'])) {
+            $payload['board_ref'] = encryptId((int) $payload['board_id']);
+            if (!empty($payload['card_id'])) {
+                $payload['open_ref'] = encryptOpenToken(
+                    (int) $payload['board_id'],
+                    (int) $payload['card_id'],
+                    null
+                );
+            } elseif (!empty($payload['list_id'])) {
+                $payload['list_ref'] = encryptId((int) $payload['list_id']);
+            }
+            $notification['data'] = $payload;
+        }
     }
+    unset($notification);
     
     echo json_encode([
         'success' => true,
