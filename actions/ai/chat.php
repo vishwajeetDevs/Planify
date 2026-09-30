@@ -29,6 +29,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once '../../config/db.php';
 require_once '../../config/ai.php';
 require_once '../../includes/functions.php';
+require_once '../../helpers/IdEncrypt.php';
 
 // Clean buffer
 ob_clean();
@@ -268,13 +269,22 @@ try {
     // Log the request for rate limiting
     logAIRequest($conn, $userId, $boardId);
     
+    // Add direct "open task" links for every task mentioned (inline in prose
+    // and as a "Task Link" column in tables), then make sure key entities
+    // (task, list, member names, dates, counts) are highlighted even when the
+    // model forgets to bold them. Both are applied to the raw markdown so the
+    // stored history renders identically after a reload.
+    $taskLinks = buildTaskLinkMap($boardData, $boardId);
+    $linkedResponse = addTaskLinks($aiResponse['response'], $taskLinks, $userMessage);
+    $highlightedResponse = highlightBoardEntities($linkedResponse, $boardData, $userName);
+
     // Parse and format the response
-    $formattedResponse = formatAIResponse($aiResponse['response'], $userMessage);
+    $formattedResponse = formatAIResponse($highlightedResponse, $userMessage);
     
     // Save only successful exchanges. Failed attempts should not pollute
     // conversation context or reappear after a reload.
     saveChatMessage($conn, $userId, $boardId, 'user', $messageToSave);
-    saveChatMessage($conn, $userId, $boardId, 'assistant', $aiResponse['response']);
+    saveChatMessage($conn, $userId, $boardId, 'assistant', $highlightedResponse);
     
     echo json_encode([
         'success' => true,
@@ -303,20 +313,18 @@ function executeQuickQuestion($conn, int $boardId, string $action): ?array {
             'label' => 'Pending tasks',
             'sql' => "
                 SELECT c.id AS card_id, c.title AS task, l.title AS list_name,
-                       c.due_date, c.priority
+                       c.due_date, " . derivedPrioritySql('c') . " AS priority
                 FROM cards c
                 INNER JOIN lists l ON l.id = c.list_id
                 WHERE l.board_id = ? AND l.is_archived = 0 AND c.is_completed = 0
-                ORDER BY
-                    CASE c.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2
-                                    WHEN 'medium' THEN 3 ELSE 4 END,
-                    c.due_date IS NULL, c.due_date, c.position
+                ORDER BY c.due_date IS NULL, c.due_date, c.position
             ",
             'columns' => [
                 ['key' => 'task', 'label' => 'Task'],
                 ['key' => 'list_name', 'label' => 'List'],
                 ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
                 ['key' => 'priority', 'label' => 'Priority', 'format' => 'priority'],
+                ['key' => 'card_id', 'label' => 'Task Link', 'format' => 'task_link'],
             ],
         ],
         'board_summary' => [
@@ -348,7 +356,7 @@ function executeQuickQuestion($conn, int $boardId, string $action): ?array {
                 SELECT c.id AS card_id, c.title AS task, l.title AS list_name,
                        c.due_date,
                        DATEDIFF(CURDATE(), c.due_date) AS days_overdue,
-                       c.priority
+                       " . derivedPrioritySql('c') . " AS priority
                 FROM cards c
                 INNER JOIN lists l ON l.id = c.list_id
                 WHERE l.board_id = ? AND l.is_archived = 0
@@ -363,6 +371,7 @@ function executeQuickQuestion($conn, int $boardId, string $action): ?array {
                 ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
                 ['key' => 'days_overdue', 'label' => 'Days Overdue'],
                 ['key' => 'priority', 'label' => 'Priority', 'format' => 'priority'],
+                ['key' => 'card_id', 'label' => 'Task Link', 'format' => 'task_link'],
             ],
         ],
         'assignees' => [
@@ -387,6 +396,7 @@ function executeQuickQuestion($conn, int $boardId, string $action): ?array {
                 ['key' => 'list_name', 'label' => 'List'],
                 ['key' => 'task_status', 'label' => 'Status'],
                 ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
+                ['key' => 'card_id', 'label' => 'Task Link', 'format' => 'task_link'],
             ],
         ],
     ];
@@ -412,9 +422,9 @@ function executeQuickQuestion($conn, int $boardId, string $action): ?array {
     $boardStmt->close();
 
     $summary = buildQuickQuestionSummary($action, $rows, $boardName);
-    $tableHtml = buildQuickQuestionTable($config['columns'], $rows);
+    $tableHtml = buildQuickQuestionTable($config['columns'], $rows, $boardId);
     $historyText = html_entity_decode(strip_tags(str_replace('<br>', "\n", $summary)), ENT_QUOTES, 'UTF-8')
-        . "\n\n" . buildQuickQuestionMarkdownTable($config['columns'], $rows);
+        . "\n\n" . buildQuickQuestionMarkdownTable($config['columns'], $rows, $boardId);
 
     return [
         'label' => $config['label'],
@@ -461,7 +471,7 @@ function buildQuickQuestionSummary(string $action, array $rows, string $boardNam
         : "<strong>No task assignments</strong> were found on {$safeBoard}.<br>Tasks can be assigned from the task details panel.";
 }
 
-function buildQuickQuestionTable(array $columns, array $rows): string {
+function buildQuickQuestionTable(array $columns, array $rows, int $boardId = 0): string {
     $html = '<table class="ai-table"><thead><tr><th>#</th>';
     foreach ($columns as $column) {
         $html .= '<th>' . htmlspecialchars($column['label'], ENT_QUOTES, 'UTF-8') . '</th>';
@@ -476,6 +486,13 @@ function buildQuickQuestionTable(array $columns, array $rows): string {
     foreach ($rows as $index => $row) {
         $html .= '<tr><td>' . ($index + 1) . '</td>';
         foreach ($columns as $column) {
+            if (($column['format'] ?? null) === 'task_link') {
+                $cardId = (int) ($row[$column['key']] ?? 0);
+                $html .= '<td>' . ($cardId > 0 && $boardId > 0
+                    ? renderTaskLinks(taskMarkdownLink(['id' => $cardId, 'href' => boardPageHref($boardId, $cardId)]))
+                    : '—') . '</td>';
+                continue;
+            }
             $value = formatQuickQuestionValue($row[$column['key']] ?? null, $column['format'] ?? null);
             $html .= '<td>' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</td>';
         }
@@ -484,13 +501,20 @@ function buildQuickQuestionTable(array $columns, array $rows): string {
     return $html . '</tbody></table>';
 }
 
-function buildQuickQuestionMarkdownTable(array $columns, array $rows): string {
+function buildQuickQuestionMarkdownTable(array $columns, array $rows, int $boardId = 0): string {
     $labels = array_merge(['#'], array_column($columns, 'label'));
     $markdown = '| ' . implode(' | ', $labels) . " |\n";
     $markdown .= '| ' . implode(' | ', array_fill(0, count($labels), '---')) . " |\n";
     foreach ($rows as $index => $row) {
         $values = [$index + 1];
         foreach ($columns as $column) {
+            if (($column['format'] ?? null) === 'task_link') {
+                $cardId = (int) ($row[$column['key']] ?? 0);
+                $values[] = $cardId > 0 && $boardId > 0
+                    ? taskMarkdownLink(['id' => $cardId, 'href' => boardPageHref($boardId, $cardId)])
+                    : '—';
+                continue;
+            }
             $value = formatQuickQuestionValue($row[$column['key']] ?? null, $column['format'] ?? null);
             $values[] = str_replace('|', '\|', $value);
         }
@@ -508,8 +532,8 @@ function formatQuickQuestionValue($value, ?string $format = null): string {
     }
     if ($format === 'priority') {
         $priority = strtolower((string) $value);
-        $icon = in_array($priority, ['urgent', 'high'], true) ? '🔴' : ($priority === 'medium' ? '🟡' : '🟢');
-        return $icon . ' ' . ucfirst($priority);
+        $icons = ['overdue' => '🔴', 'urgent' => '🔴', 'high' => '🟠', 'medium' => '🟡', 'low' => '🟢', 'none' => '⚪'];
+        return ($icons[$priority] ?? '⚪') . ' ' . ($priority === 'none' ? 'No due date' : ucfirst($priority));
     }
     return (string) $value;
 }
@@ -823,6 +847,53 @@ function logAIRequest($conn, $userId, $boardId) {
 // ============================================================
 
 /**
+ * Priority exactly as the board UI shows it (public/board.php card badge):
+ *   overdue  - due date already passed
+ *   high     - due today, tomorrow or the day after (<= 2 days)
+ *   medium   - due within a week (3-7 days)
+ *   low      - due in more than 7 days
+ *   none     - no due date set
+ *
+ * @return array{priority: string, days_until_due: int|null}
+ */
+function derivePriorityFromDueDate(?string $dueDate): array {
+    if (empty($dueDate) || $dueDate === '0000-00-00' || $dueDate === '0000-00-00 00:00:00') {
+        return ['priority' => 'none', 'days_until_due' => null];
+    }
+    try {
+        $due = new DateTime($dueDate);
+    } catch (Throwable $e) {
+        return ['priority' => 'none', 'days_until_due' => null];
+    }
+    $today = new DateTime();
+    $today->setTime(0, 0, 0);
+    $due->setTime(0, 0, 0);
+    $days = (int) $today->diff($due)->format('%r%a');
+
+    if ($days < 0) {
+        $priority = 'overdue';
+    } elseif ($days <= 2) {
+        $priority = 'high';
+    } elseif ($days <= 7) {
+        $priority = 'medium';
+    } else {
+        $priority = 'low';
+    }
+    return ['priority' => $priority, 'days_until_due' => $days];
+}
+
+/** SQL expression producing the same derived priority for a cards row alias `c`. */
+function derivedPrioritySql(string $alias = 'c'): string {
+    return "CASE
+        WHEN {$alias}.due_date IS NULL THEN 'none'
+        WHEN DATE({$alias}.due_date) < CURDATE() THEN 'overdue'
+        WHEN DATEDIFF(DATE({$alias}.due_date), CURDATE()) <= 2 THEN 'high'
+        WHEN DATEDIFF(DATE({$alias}.due_date), CURDATE()) <= 7 THEN 'medium'
+        ELSE 'low'
+    END";
+}
+
+/**
  * Fetch board data for AI context (minimal, secure data only)
  */
 function fetchBoardDataForAI($conn, $boardId) {
@@ -871,7 +942,13 @@ function fetchBoardDataForAI($conn, $boardId) {
     $stmt->close();
     
     // Get assignees for each task
+    $taskIndex = [];
     foreach ($tasks as &$task) {
+        // Priority exactly as the board displays it (derived from the due date).
+        $derived = derivePriorityFromDueDate($task['due_date'] ?? null);
+        $task['priority'] = $derived['priority'];
+        $task['days_until_due'] = $derived['days_until_due'];
+
         $stmt = $conn->prepare("
             SELECT u.name 
             FROM card_assignees ca
@@ -905,9 +982,12 @@ function fetchBoardDataForAI($conn, $boardId) {
             $task['labels'] = [];
         }
         
-        // Remove internal ID from response
+        // Keep an internal id → title index for building deep links, then
+        // remove the ID from the data that is shown to the AI.
+        $taskIndex[] = ['id' => (int) $task['id'], 'title' => (string) $task['title']];
         unset($task['id']);
     }
+    unset($task);
     
     // Get board members
     $stmt = $conn->prepare("
@@ -921,6 +1001,17 @@ function fetchBoardDataForAI($conn, $boardId) {
     $members = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
     $stmt->close();
     
+    // Tasks with the nearest due date first (no due date last) so priority
+    // listings come out in the order the user expects.
+    usort($tasks, function ($a, $b) {
+        $da = $a['days_until_due'];
+        $db = $b['days_until_due'];
+        if ($da === null && $db === null) return strcmp($a['title'], $b['title']);
+        if ($da === null) return 1;
+        if ($db === null) return -1;
+        return $da <=> $db;
+    });
+
     // Build clean data structure
     return [
         'board_name' => $board['name'],
@@ -933,7 +1024,9 @@ function fetchBoardDataForAI($conn, $boardId) {
         'members' => $members,
         'stats' => calculateBoardStats($tasks),
         'current_date' => date('Y-m-d'),
-        'current_time' => date('H:i:s')
+        'current_time' => date('H:i:s'),
+        // Internal only (stripped before the prompt is built): used for task links.
+        '_task_index' => $taskIndex,
     ];
 }
 
@@ -941,19 +1034,32 @@ function fetchBoardDataForAI($conn, $boardId) {
  * Calculate board statistics
  */
 function calculateBoardStats($tasks) {
+    $emptyPriorityCounts = ['overdue' => 0, 'high' => 0, 'medium' => 0, 'low' => 0, 'none' => 0];
     $stats = [
         'total' => count($tasks),
         'completed' => 0,
         'pending' => 0,
         'overdue' => 0,
         'due_today' => 0,
-        'due_this_week' => 0
+        'due_this_week' => 0,
+        'priority_rule' => 'overdue = due date passed; high = due within 2 days; medium = due in 3-7 days; low = due in more than 7 days; none = no due date',
+        'by_priority' => $emptyPriorityCounts,
+        'pending_by_priority' => $emptyPriorityCounts,
     ];
-    
+
     $today = date('Y-m-d');
     $weekEnd = date('Y-m-d', strtotime('+7 days'));
-    
+
     foreach ($tasks as $task) {
+        $priority = strtolower((string) ($task['priority'] ?? ''));
+        if (!isset($stats['by_priority'][$priority])) {
+            $priority = derivePriorityFromDueDate($task['due_date'] ?? null)['priority'];
+        }
+        $stats['by_priority'][$priority]++;
+        if (empty($task['is_completed'])) {
+            $stats['pending_by_priority'][$priority]++;
+        }
+
         if ($task['is_completed']) {
             $stats['completed']++;
         } else {
@@ -1069,17 +1175,24 @@ function buildAIPrompt($boardData, $userMessage, $conversationHistory, $userName
         $recentHistory = array_slice($conversationHistory, -20);
         foreach ($recentHistory as $msg) {
             $role = $msg['role'] === 'user' ? 'User' : 'Assistant';
+            // Task links are added server-side; strip them from history so the
+            // model does not try to reproduce URLs itself.
+            $cleanMessage = preg_replace('/\[([^\]\n]+)\]\([^)\n]*\)/', '$1', (string) $msg['message']);
             // Retain enough detail (including table rows) to resolve follow-ups.
-            $msgText = strlen($msg['message']) > 1200
-                ? substr($msg['message'], 0, 1200) . '...'
-                : $msg['message'];
+            $msgText = strlen($cleanMessage) > 1200
+                ? substr($cleanMessage, 0, 1200) . '...'
+                : $cleanMessage;
             $historyText .= "$role: $msgText\n";
         }
     }
+
+    // Never expose internal ids to the model.
+    $promptData = $boardData;
+    unset($promptData['_task_index']);
     
     $contextPrompt = "
 BOARD DATA:
-" . json_encode($boardData, JSON_PRETTY_PRINT) . "
+" . json_encode($promptData, JSON_PRETTY_PRINT) . "
 $historyText
 CURRENT USER QUESTION: " . $userMessage . "
 
@@ -1097,6 +1210,22 @@ IMPORTANT: If this question references something from the previous conversation 
  */
 function getQuestionFormatGuidance(string $question): string {
     $question = strtolower(trim($question));
+
+    // Explicit requests for a list/table of several tasks (e.g. "list the high
+    // priority tasks in tabular form") take precedence over single-fact hints.
+    $wantsCollection = preg_match(
+        '/\b(list|show|give|display|tabular|table|all|every|which tasks|what tasks|how many|tasks? (?:with|that|having|in))\b/i',
+        $question
+    ) || preg_match('/\btasks\b/i', $question);
+    // Mentioning a priority level ("high priority", "urgent") is a filter request
+    // unless the user asks for the priority *of* a specific task.
+    $asksPriorityOfOne = preg_match('/\bpriority (?:of|for)\b|\bwhat(?:\'s| is) the priority\b/i', $question);
+    $mentionsPriorityLevel = preg_match('/\b(urgent|high|medium|low|important|critical)\b/i', $question);
+
+    if (($wantsCollection || ($mentionsPriorityLevel && !$asksPriorityOfOne))
+        && preg_match('/\b(priority|urgent|high|medium|low|important|critical|status|pending|completed|overdue|assigned|due)\b/i', $question)) {
+        return '- The user wants the matching tasks (filtered by the field they mention). Use a markdown table with a Task column when more than one task matches; plain text when only one does. If nothing matches, say so and state the counts per priority from stats.';
+    }
 
     if (preg_match(
         '/\b(description|describe it|who is assigned|assigned to|due date|priority|status|'
@@ -1763,7 +1892,7 @@ function generateFallbackResponse($userMessage, $boardData, $userName, $conversa
     
     // Greeting
     if (preg_match('/^(hi|hello|hey|good morning|good afternoon|good evening)/i', $message)) {
-        return "Hello {$userName}! 👋 I'm your Planify Assistant (AI is temporarily busy). I can help you with:\n\n" .
+        return "Hello **{$userName}**! 👋 I'm **Planner**, your board assistant (AI is temporarily busy). I can help you with:\n\n" .
                "• **Board summary** - Overview of this board\n" .
                "• **Pending tasks** - Tasks that need to be done\n" .
                "• **Overdue tasks** - Tasks past their due date\n" .
@@ -1774,7 +1903,7 @@ function generateFallbackResponse($userMessage, $boardData, $userName, $conversa
     
     // Help
     if (preg_match('/(help|what can you|how do|assist)/i', $message)) {
-        return "👋 I'm your Planify Assistant (AI temporarily busy). Here's what I can help you with:\n\n" .
+        return "👋 I'm **Planner**, your board assistant (AI temporarily busy). Here's what I can help you with:\n\n" .
                "**Quick Commands:**\n" .
                "• \"Board summary\" - Get an overview of the board\n" .
                "• \"Pending tasks\" - See incomplete tasks\n" .
@@ -1816,6 +1945,383 @@ function generateFallbackResponse($userMessage, $boardData, $userName, $conversa
 // ============================================================
 
 /**
+ * Markdown link that opens a task directly in the app.
+ * The link title carries the card id ("task:123") so the renderer can open the
+ * task in-place without a page reload.
+ */
+function taskMarkdownLink(array $link, string $label = 'Open task'): string {
+    $label = str_replace(['[', ']'], ['(', ')'], $label);
+    return '[' . $label . '](' . $link['href'] . ' "task:' . (int) $link['id'] . '")';
+}
+
+/**
+ * Build [ ['id' => int, 'title' => string, 'href' => string], ... ] for the board's tasks.
+ */
+function buildTaskLinkMap(array $boardData, int $boardId): array {
+    $links = [];
+    foreach ($boardData['_task_index'] ?? [] as $task) {
+        $title = trim((string) ($task['title'] ?? ''));
+        $id = (int) ($task['id'] ?? 0);
+        if ($id <= 0 || $title === '') {
+            continue;
+        }
+        $links[] = [
+            'id' => $id,
+            'title' => $title,
+            'href' => boardPageHref($boardId, $id),
+        ];
+    }
+    return $links;
+}
+
+/**
+ * Normalise a task title for comparison (case, quotes, emphasis, whitespace).
+ */
+function normaliseTaskTitle(string $title): string {
+    $title = preg_replace('/\[([^\]]*)\]\([^)]*\)/', '$1', $title); // strip links
+    $title = str_replace(['**', '__', '`'], '', $title);
+    $title = trim($title, " \t\"'“”‘’");
+    $title = preg_replace('/\s+/u', ' ', $title);
+    return mb_strtolower(trim($title));
+}
+
+/**
+ * Add direct task links to a markdown response:
+ *  - every markdown table that has a Task/Title column gets a "Task Link" column
+ *  - task titles mentioned in prose become clickable links
+ *  - if the user asked about a task that the reply does not link, a
+ *    "🔗 Task link" line is appended so the link is never missing
+ */
+function addTaskLinks(string $text, array $taskLinks, string $userMessage = ''): string {
+    if (trim($text) === '' || empty($taskLinks)) {
+        return $text;
+    }
+
+    $byTitle = [];
+    foreach ($taskLinks as $link) {
+        $byTitle[normaliseTaskTitle($link['title'])] = $link;
+    }
+
+    // Longest titles first so "Login Testing v2" wins over "Login Testing".
+    $sorted = $taskLinks;
+    usort($sorted, fn($a, $b) => mb_strlen($b['title']) <=> mb_strlen($a['title']));
+
+    $lines = preg_split('/\r?\n/', $text);
+    $linkedIds = [];
+
+    // ---- 1. Tables: append a "Task Link" column -------------------------
+    $i = 0;
+    $lineCount = count($lines);
+    while ($i < $lineCount) {
+        if (!preg_match('/^\s*\|.*\|\s*$/', $lines[$i])) {
+            $i++;
+            continue;
+        }
+        $start = $i;
+        while ($i < $lineCount && preg_match('/^\s*\|.*\|\s*$/', $lines[$i])) {
+            $i++;
+        }
+        $end = $i; // exclusive
+
+        $splitRow = function (string $row): array {
+            $row = trim($row);
+            $row = preg_replace('/^\|/', '', $row);
+            $row = preg_replace('/\|$/', '', $row);
+            // split on unescaped pipes
+            return array_map('trim', preg_split('/(?<!\\\\)\|/', $row));
+        };
+
+        $header = $splitRow($lines[$start]);
+        $taskCol = null;
+        $linkCol = null;
+        foreach ($header as $idx => $h) {
+            $plain = strip_tags($h);
+            if ($taskCol === null && preg_match('/^\s*(task|tasks|task name|title|card|card name)\s*$/i', $plain)) {
+                $taskCol = $idx;
+            } elseif ($linkCol === null && preg_match('/\blink\b|\bopen\b/i', $plain)) {
+                $linkCol = $idx; // model echoed an existing "Task Link" column (text only)
+            }
+        }
+        if ($taskCol === null) {
+            continue;
+        }
+
+        $rowLinks = [];
+        $matches = 0;
+        for ($r = $start + 1; $r < $end; $r++) {
+            if (preg_match('/^\s*\|[-:| ]+\|\s*$/', $lines[$r])) {
+                $rowLinks[$r] = null; // separator
+                continue;
+            }
+            $cells = $splitRow($lines[$r]);
+            $cell = $cells[$taskCol] ?? '';
+            $key = normaliseTaskTitle($cell);
+            if ($key !== '' && isset($byTitle[$key])) {
+                $rowLinks[$r] = $byTitle[$key];
+                $matches++;
+            } else {
+                $rowLinks[$r] = false;
+            }
+        }
+        if ($matches === 0) {
+            continue;
+        }
+
+        if ($linkCol === null) {
+            // Append a new "Task Link" column.
+            $lines[$start] = rtrim($lines[$start]) . ' Task Link |';
+            foreach ($rowLinks as $r => $link) {
+                if ($link === null) {
+                    $lines[$r] = rtrim($lines[$r]) . ' --- |';
+                } elseif ($link === false) {
+                    $lines[$r] = rtrim($lines[$r]) . ' — |';
+                } else {
+                    $lines[$r] = rtrim($lines[$r]) . ' ' . taskMarkdownLink($link) . ' |';
+                    $linkedIds[$link['id']] = true;
+                }
+            }
+        } else {
+            // Fill the existing link column with real links.
+            foreach ($rowLinks as $r => $link) {
+                if ($link === null) {
+                    continue;
+                }
+                $cells = $splitRow($lines[$r]);
+                while (count($cells) <= $linkCol) {
+                    $cells[] = '';
+                }
+                if ($link === false) {
+                    $cells[$linkCol] = preg_match('/\[[^\]]*\]\([^)]*\)/', $cells[$linkCol]) ? $cells[$linkCol] : '—';
+                } else {
+                    $cells[$linkCol] = taskMarkdownLink($link);
+                    $linkedIds[$link['id']] = true;
+                }
+                $lines[$r] = '| ' . implode(' | ', $cells) . ' |';
+            }
+        }
+    }
+
+    // ---- 2. Prose: link task titles inline ------------------------------
+    $protectedRegex = '/(\[[^\]\n]*\]\([^)\n]*\)|`[^`\n]+`)/u';
+    foreach ($lines as &$line) {
+        $trimmed = trim($line);
+        if ($trimmed === '' || preg_match('/^\|.*\|$/', $trimmed) || preg_match('/^#{1,6}\s/', $trimmed)) {
+            continue;
+        }
+        $segments = preg_split($protectedRegex, $line, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        if ($segments === false) {
+            continue;
+        }
+        foreach ($segments as &$segment) {
+            if (preg_match('/^(\[|`)/', $segment) && preg_match($protectedRegex, $segment)) {
+                continue;
+            }
+            foreach ($sorted as $link) {
+                $title = $link['title'];
+                if (mb_strlen($title) < 3) {
+                    continue;
+                }
+                $quoted = preg_replace('/\s+/u', '\s+', preg_quote($title, '/'));
+                // Short single-word titles must match exactly (case-sensitive) to avoid
+                // linking ordinary words; longer titles match case-insensitively.
+                $flags = (mb_strlen($title) <= 4 && strpos($title, ' ') === false) ? 'u' : 'iu';
+                // Allow optional surrounding ** so the whole bold span becomes the link.
+                $regex = '/(\*\*)?(?<![\p{L}\p{N}_])' . $quoted . '(?![\p{L}\p{N}_])(\*\*)?/' . $flags;
+                $segment = preg_replace_callback($regex, function ($m) use ($link, &$linkedIds) {
+                    $linkedIds[$link['id']] = true;
+                    $label = preg_replace('/^\*\*|\*\*$/', '', $m[0]);
+                    return taskMarkdownLink($link, $label);
+                }, $segment, 1);
+            }
+        }
+        unset($segment);
+        $line = implode('', $segments);
+    }
+    unset($line);
+
+    $result = implode("\n", $lines);
+
+    // ---- 3. Fallback: the user asked about a task we did not link ---------
+    if ($userMessage !== '') {
+        $asked = [];
+        $normalisedQuestion = normaliseTaskTitle($userMessage);
+        foreach ($sorted as $link) {
+            if (isset($linkedIds[$link['id']]) || mb_strlen($link['title']) < 3) {
+                continue;
+            }
+            $key = normaliseTaskTitle($link['title']);
+            if ($key !== '' && preg_match('/(?<![\p{L}\p{N}_])' . preg_quote($key, '/') . '(?![\p{L}\p{N}_])/u', $normalisedQuestion)) {
+                $asked[] = $link;
+            }
+            if (count($asked) >= 3) {
+                break;
+            }
+        }
+        if ($asked) {
+            $result = rtrim($result) . "\n\n";
+            foreach ($asked as $link) {
+                $result .= '🔗 Task link: ' . taskMarkdownLink($link, $link['title']) . "\n";
+            }
+            $result = rtrim($result);
+        }
+    }
+
+    return $result;
+}
+
+/**
+ * Convert safe markdown links to anchors. Only in-app board links are allowed
+ * (relative path to board.php with query parameters) so the model can never
+ * inject arbitrary or javascript: URLs.
+ *
+ * @param string $text     Text that may contain [label](href "task:ID")
+ * @param bool   $escaped  True when $text has already been passed through htmlspecialchars
+ */
+function renderTaskLinks(string $text, bool $escaped = false): string {
+    $quote = $escaped ? '(?:&quot;|")' : '"';
+    $pattern = '/\[([^\]\n]+)\]\(([A-Za-z0-9_\-.\/?=&%;]+)(?:\s+' . $quote . 'task:(\d+)' . $quote . ')?\)/u';
+    return preg_replace_callback($pattern, function ($m) use ($escaped) {
+        $label = $m[1];
+        $href = $escaped ? html_entity_decode($m[2], ENT_QUOTES, 'UTF-8') : $m[2];
+        $cardId = isset($m[3]) ? (int) $m[3] : 0;
+
+        $isBoardLink = strpos($href, 'board.php?') !== false
+            && strpos($href, '//') !== 0
+            && !preg_match('/^[a-z][a-z0-9+.\-]*:/i', $href);
+        if (!$isBoardLink) {
+            return $label; // drop anything that is not an in-app board link
+        }
+
+        $safeHref = htmlspecialchars($href, ENT_QUOTES, 'UTF-8');
+        $data = $cardId > 0 ? ' data-card-id="' . $cardId . '"' : '';
+        return '<a href="' . $safeHref . '" class="ai-task-link"' . $data
+            . ' title="Open this task"><i class="fas fa-external-link-alt"></i>' . $label . '</a>';
+    }, $text);
+}
+
+/**
+ * Wrap important keywords in markdown bold so they render highlighted.
+ *
+ * Highlights (outside markdown tables and existing bold/code spans):
+ *  - task titles, list titles, member names and the board name from board data
+ *  - the current user's name
+ *  - formatted dates such as "Sep 30, 2026", "30 Sep 2026" or "2026-09-30"
+ *  - counts such as "5 members", "3 tasks", "2 lists"
+ *  - status words: pending, completed, overdue, high/medium/low priority
+ */
+function highlightBoardEntities(string $text, array $boardData, string $userName = ''): string {
+    if (trim($text) === '') {
+        return $text;
+    }
+
+    // Collect entity names, longest first so "Login Testing" wins over "Login".
+    $entities = [];
+    foreach ($boardData['tasks'] ?? [] as $task) {
+        if (!empty($task['title'])) {
+            $entities[] = $task['title'];
+        }
+        foreach ($task['assignees'] ?? [] as $assignee) {
+            $entities[] = $assignee;
+        }
+        if (!empty($task['created_by'])) {
+            $entities[] = $task['created_by'];
+        }
+    }
+    foreach ($boardData['lists'] ?? [] as $listTitle) {
+        $entities[] = $listTitle;
+    }
+    foreach ($boardData['members'] ?? [] as $member) {
+        if (!empty($member['name'])) {
+            $entities[] = $member['name'];
+        }
+    }
+    if (!empty($boardData['board_name'])) {
+        $entities[] = $boardData['board_name'];
+    }
+    if ($userName !== '') {
+        $entities[] = $userName;
+    }
+
+    $entities = array_values(array_unique(array_filter(array_map(function ($value) {
+        return trim((string) $value);
+    }, $entities), function ($value) {
+        // Skip single characters and purely numeric names to avoid noisy matches.
+        return mb_strlen($value) >= 2 && !is_numeric($value);
+    })));
+    usort($entities, function ($a, $b) {
+        return mb_strlen($b) <=> mb_strlen($a);
+    });
+
+    $patterns = [];
+    foreach ($entities as $entity) {
+        // Allow flexible whitespace between words. Long names match case-insensitively;
+        // very short names (e.g. list "QA") must match exactly so words like "do" or "to"
+        // are not highlighted by accident.
+        $quoted = preg_replace('/\s+/u', '\s+', preg_quote($entity, '/'));
+        if (mb_strlen($entity) <= 3) {
+            $quoted = '(?-i:' . $quoted . ')';
+        }
+        $patterns[] = '(?<![\p{L}\p{N}_])' . $quoted . '(?![\p{L}\p{N}_])';
+    }
+
+    $monthNames = '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*';
+    $extraPatterns = [
+        // Sep 30, 2026 | September 30 2026 | 30 Sep 2026 | 2026-09-30 | 30/09/2026
+        $monthNames . '\s+\d{1,2}(?:st|nd|rd|th)?(?:,\s*\d{4})?',
+        '\d{1,2}(?:st|nd|rd|th)?\s+' . $monthNames . '(?:,?\s*\d{4})?',
+        '\d{4}-\d{2}-\d{2}',
+        '\d{1,2}\/\d{1,2}\/\d{2,4}',
+        // Counts: 5 members, 3 tasks, 2 lists, 1 card, 4 assignees
+        '\d+\s+(?:members?|tasks?|cards?|lists?|assignees?|comments?|attachments?|checklists?|items?|days?|weeks?)',
+        // Statuses / priorities
+        '(?:urgent|high|medium|low)(?:\s+and\s+(?:urgent|high|medium|low))?\s+priority',
+        'overdue|pending|completed|in\s+progress|urgent',
+        'today|tomorrow|yesterday',
+    ];
+    foreach ($extraPatterns as $extra) {
+        $patterns[] = '(?<![\p{L}\p{N}_])(?:' . $extra . ')(?![\p{L}\p{N}_])';
+    }
+
+    if (empty($patterns)) {
+        return $text;
+    }
+
+    $entityRegex = '/' . implode('|', $patterns) . '/iu';
+
+    // Leave existing bold, inline code and markdown links untouched.
+    $protectedRegex = '/(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]*\]\([^)\n]*\))/u';
+
+    $lines = preg_split('/\r?\n/', $text);
+    foreach ($lines as &$line) {
+        $trimmed = trim($line);
+        // Skip markdown table rows and headings (headings are already emphasised).
+        if ($trimmed === '' || preg_match('/^\|.*\|$/', $trimmed) || preg_match('/^#{1,6}\s/', $trimmed)) {
+            continue;
+        }
+
+        $segments = preg_split($protectedRegex, $line, -1, PREG_SPLIT_DELIM_CAPTURE | PREG_SPLIT_NO_EMPTY);
+        if ($segments === false) {
+            continue;
+        }
+
+        foreach ($segments as &$segment) {
+            if (preg_match($protectedRegex, $segment) && preg_match('/^(\*\*|`|\[)/', $segment)) {
+                continue; // protected span, leave as-is
+            }
+            $segment = preg_replace_callback($entityRegex, function ($m) {
+                return '**' . $m[0] . '**';
+            }, $segment);
+        }
+        unset($segment);
+
+        $line = implode('', $segments);
+    }
+    unset($line);
+
+    return implode("\n", $lines);
+}
+
+/**
  * Format AI response and detect tables
  */
 function formatAIResponse($text, string $userMessage = '') {
@@ -1852,6 +2358,9 @@ function formatAIResponse($text, string $userMessage = '') {
     $summaryText = preg_replace('/^### (.*?)$/m', '<h4 class="font-bold text-base mt-3 mb-1">$1</h4>', $summaryText);
     $summaryText = preg_replace('/^## (.*?)$/m', '<h3 class="font-bold text-lg mt-3 mb-1">$1</h3>', $summaryText);
     $summaryText = preg_replace('/^# (.*?)$/m', '<h2 class="font-bold text-xl mt-3 mb-1">$1</h2>', $summaryText);
+
+    // Convert in-app task links ([label](board.php?... "task:ID")) to anchors
+    $summaryText = renderTaskLinks($summaryText);
     
     // Convert markdown bold to HTML
     $summaryText = preg_replace('/\*\*(.*?)\*\*/', '<strong>$1</strong>', $summaryText);
@@ -1936,7 +2445,9 @@ function extractTextAndTable($text) {
                 $cells = array_map('trim', explode('|', trim($trimmedLine, '|')));
                 $tableHtml .= '<tr>';
                 foreach ($cells as $cell) {
-                    $tableHtml .= '<td>' . htmlspecialchars($cell) . '</td>';
+                    $safeCell = renderTaskLinks(htmlspecialchars($cell), true);
+                    $safeCell = preg_replace('/\*\*([^*]+)\*\*/', '<strong>$1</strong>', $safeCell);
+                    $tableHtml .= '<td>' . $safeCell . '</td>';
                 }
                 $tableHtml .= '</tr>';
                 $dataRowCount++;

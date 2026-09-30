@@ -4013,15 +4013,31 @@ document.addEventListener('keydown', (e) => {
 <?php endif; ?>
 
 <!-- AI Chatbot -->
+<?php
+/**
+ * Planner logo: a speech bubble with a check mark and AI sparkles.
+ * Uses currentColor so it takes the colour of its container (white on the
+ * theme-coloured circles). $size is the rendered width/height in px.
+ */
+function plannerLogoSvg(int $size = 18, string $extraClass = ''): string {
+    return '<svg class="planner-logo ' . $extraClass . '" width="' . $size . '" height="' . $size . '" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+        . '<path d="M8.5 4.5h5.5a4 4 0 0 1 4 4V13a4 4 0 0 1-4 4H9.6l-3.5 3c-.6.5-1.6.1-1.6-.7V8.5a4 4 0 0 1 4-4Z" fill="currentColor" fill-opacity=".22"/>'
+        . '<path d="M8.5 4.5h5.5a4 4 0 0 1 4 4V13a4 4 0 0 1-4 4H9.6l-3.5 3c-.6.5-1.6.1-1.6-.7V8.5a4 4 0 0 1 4-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>'
+        . '<path d="M8.2 11l2.3 2.3 4.3-4.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>'
+        . '<path class="planner-logo-spark" d="M19.5 1.4c.25 1.55.9 2.2 2.45 2.45-1.55.25-2.2.9-2.45 2.45-.25-1.55-.9-2.2-2.45-2.45 1.55-.25 2.2-.9 2.45-2.45Z" fill="currentColor"/>'
+        . '<path class="planner-logo-spark planner-logo-spark-sm" d="M20.8 8.2c.16 1 .58 1.42 1.6 1.6-1.02.18-1.44.6-1.6 1.6-.16-1-.58-1.42-1.6-1.6 1.02-.18 1.44-.6 1.6-1.6Z" fill="currentColor" fill-opacity=".85"/>'
+        . '</svg>';
+}
+?>
 <div id="chatbotContainer" class="fixed bottom-8 right-8 z-[9999]">
     <!-- Chatbot Toggle Button -->
     <button 
         id="chatbotToggle"
         onclick="toggleChatbot()"
         class="chatbot-theme-btn w-14 h-14 text-white rounded-full shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center justify-center"
-        title="Ask Planify AI"
+        title="Ask Planner"
     >
-        <i class="fas fa-robot text-xl"></i>
+        <?php echo plannerLogoSvg(28); ?>
         <span class="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white dark:border-gray-900 animate-pulse"></span>
     </button>
 </div>
@@ -4039,11 +4055,11 @@ document.addEventListener('keydown', (e) => {
     <!-- Header -->
     <div class="chatbot-theme-header p-4 flex items-center justify-between flex-shrink-0">
         <div class="flex items-center gap-3">
-            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
-                <i class="fas fa-robot text-white text-lg"></i>
+            <div class="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center text-white">
+                <?php echo plannerLogoSvg(22); ?>
             </div>
             <div>
-                <h3 class="text-white font-semibold">Planify Assistant</h3>
+                <h3 class="text-white font-semibold">Planner</h3>
                 <p class="text-white/70 text-xs">AI-powered help for your board</p>
             </div>
         </div>
@@ -4056,18 +4072,18 @@ document.addEventListener('keydown', (e) => {
     
     <!-- Suggested Questions -->
     <div id="suggestedQuestions" class="p-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-        <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Quick questions:</p>
-        <div class="flex flex-wrap gap-2">
-            <button type="button" onclick="runQuickQuestion('pending_tasks', 'Pending tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+            <span class="text-xs text-gray-500 dark:text-gray-400 shrink-0">Quick questions:</span>
+            <button type="button" onclick="runQuickQuestion('pending_tasks', 'Pending tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors whitespace-nowrap">
                 Pending tasks
             </button>
-            <button type="button" onclick="runQuickQuestion('board_summary', 'Board summary', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('board_summary', 'Board summary', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors whitespace-nowrap">
                 Board summary
             </button>
-            <button type="button" onclick="runQuickQuestion('overdue_tasks', 'Overdue tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('overdue_tasks', 'Overdue tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors whitespace-nowrap">
                 Overdue tasks
             </button>
-            <button type="button" onclick="runQuickQuestion('assignees', 'Assignees', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('assignees', 'Assignees', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors whitespace-nowrap">
                 Assignees
             </button>
         </div>
@@ -4082,12 +4098,12 @@ document.addEventListener('keydown', (e) => {
     >
         <!-- Welcome Message -->
         <div class="flex gap-3">
-            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-                <i class="fas fa-robot text-white text-sm"></i>
+            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white">
+                <?php echo plannerLogoSvg(17); ?>
             </div>
             <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-[85%]">
                 <p class="text-sm text-gray-700 dark:text-gray-200">
-                    Hi! 👋 I'm your Planify Assistant. Ask me anything about this board, or upload an image for me to analyze!
+                    Hi! 👋 I'm <strong class="chat-highlight">Planner</strong>. Ask me anything about this board, or upload an image for me to analyze!
                 </p>
             </div>
         </div>
@@ -4230,12 +4246,37 @@ document.addEventListener('keydown', (e) => {
     .chatbot-avatar {
         background-color: var(--color-primary);
     }
+    /* Planner logo: keep crisp and give the sparkle a gentle twinkle on the launcher */
+    .planner-logo {
+        display: block;
+        flex-shrink: 0;
+    }
+    #chatbotToggle .planner-logo-spark {
+        transform-origin: 19.5px 3.85px;
+        animation: planner-spark 2.6s ease-in-out infinite;
+    }
+    #chatbotToggle .planner-logo-spark-sm {
+        transform-origin: 20.8px 9.8px;
+        animation-delay: 1.3s;
+    }
+    @keyframes planner-spark {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(0.55); opacity: 0.55; }
+    }
     .chatbot-user-bubble {
         background-color: var(--color-primary);
     }
     .chatbot-quick-btn:hover {
         border-color: var(--color-primary);
         color: var(--color-primary);
+    }
+    .dark .chatbot-quick-btn {
+        color: rgb(243 244 246);
+    }
+    .dark .chatbot-quick-btn:hover {
+        color: #ffffff;
+        border-color: rgba(255, 255, 255, 0.5);
+        background-color: rgba(255, 255, 255, 0.1);
     }
     .chatbot-input:focus {
         --tw-ring-color: var(--color-primary);
@@ -4322,12 +4363,78 @@ document.addEventListener('keydown', (e) => {
     }
     
     /* AI Message Content Styling */
-    .ai-message-content strong {
+    .ai-message-content strong,
+    .chat-highlight {
         font-weight: 600;
         color: var(--color-primary);
+        background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+        padding: 0 0.3em;
+        border-radius: 0.3em;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
     }
-    .dark .ai-message-content strong {
-        color: var(--color-primary-light);
+    /* Dark mode: theme colours (esp. the default mono grey) vanish on the dark
+       bubble, so use white text on a translucent white pill instead. */
+    .dark .ai-message-content strong,
+    .dark .chat-highlight {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.14);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+    }
+    .ai-message-content h2 strong, .ai-message-content h3 strong, .ai-message-content h4 strong {
+        background: none;
+        padding: 0;
+    }
+
+    /* While a task modal (#cardModal, z-250) is open, keep the chat panel visible
+       but beneath the modal and its sub-dialogs (z-260/270) so the task opens
+       on top and the chat state is preserved underneath. */
+    #chatbotPanel.chatbot-under-task {
+        z-index: 240 !important;
+    }
+
+    /* Direct task links inside chat replies */
+    .ai-task-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3em;
+        font-weight: 600;
+        color: var(--color-primary);
+        background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--color-primary) 35%, transparent);
+        padding: 0 0.45em;
+        border-radius: 0.4em;
+        text-decoration: none;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .ai-task-link:hover {
+        background: var(--color-primary);
+        color: #fff;
+    }
+    .ai-task-link i {
+        font-size: 0.75em;
+        opacity: 0.85;
+    }
+    .dark .ai-task-link {
+        color: #ffffff;
+        background: rgba(255, 255, 255, 0.14);
+        border-color: rgba(255, 255, 255, 0.45);
+        text-decoration: underline;
+        text-decoration-color: rgba(255, 255, 255, 0.5);
+        text-underline-offset: 2px;
+    }
+    .dark .ai-task-link i {
+        opacity: 1;
+    }
+    .dark .ai-task-link:hover {
+        background: #ffffff;
+        color: #111827;
+        text-decoration: none;
+    }
+    .ai-table td .ai-task-link {
+        white-space: nowrap;
     }
     .ai-message-content em {
         font-style: italic;
@@ -4496,6 +4603,8 @@ document.addEventListener('keydown', (e) => {
 // Chatbot functionality
 const currentBoardIdForChat = <?php echo $boardId; ?>;
 let isChatbotOpen = false;
+// Planner logo markup for avatars rendered from JS (same SVG as the PHP helper).
+const PLANNER_AVATAR_SVG = <?php echo json_encode(plannerLogoSvg(17)); ?>;
 let chatHistoryLoaded = false;
 let chatAiAvailable = false;
 let chatAiRetryAt = 0;
@@ -5603,8 +5712,8 @@ function addMessageToChat(message, sender, tableHtml = null, isError = false, is
         }
         
         messageDiv.innerHTML = `
-            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-                <i class="fas fa-robot text-white text-sm"></i>
+            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white">
+                ${PLANNER_AVATAR_SVG}
             </div>
             <div class="${bgColor} ai-response-bubble rounded-2xl rounded-tl-md px-4 py-3">
                 ${content}
@@ -5630,6 +5739,23 @@ function parseMarkdownToHtml(text) {
     
     // Handle inline code (`)
     result = result.replace(/`([^`]+)`/g, '<code class="bg-gray-200 dark:bg-gray-600 px-1 py-0.5 rounded text-sm">$1</code>');
+
+    // Handle in-app task links: [label](…/board.php?o=… "task:ID").
+    // Only relative board links are allowed; anything else is rendered as plain text.
+    // Anchors are swapped for placeholders so the emphasis rules below cannot
+    // mangle the underscores/asterisks inside the href.
+    const linkPlaceholders = [];
+    result = result.replace(/\[([^\]\n]+)\]\(([A-Za-z0-9_\-.\/?=&%;]+)(?:\s+(?:&quot;|")task:(\d+)(?:&quot;|"))?\)/g, (match, label, href, cardId) => {
+        const decodedHref = href.replace(/&amp;/g, '&');
+        const isBoardLink = decodedHref.includes('board.php?')
+            && !decodedHref.startsWith('//')
+            && !/^[a-z][a-z0-9+.\-]*:/i.test(decodedHref);
+        if (!isBoardLink) return label;
+        const safeHref = escapeHtml(decodedHref);
+        const data = cardId ? ` data-card-id="${cardId}"` : '';
+        linkPlaceholders.push(`<a href="${safeHref}" class="ai-task-link"${data} title="Open this task"><i class="fas fa-external-link-alt"></i>${label}</a>`);
+        return `\u0000AILINK${linkPlaceholders.length - 1}\u0000`;
+    });
     
     // Handle headers (## Header)
     result = result.replace(/^### (.*?)$/gm, '<h4 class="font-bold text-base mt-3 mb-1">$1</h4>');
@@ -5657,9 +5783,48 @@ function parseMarkdownToHtml(text) {
     
     // Handle line breaks - but preserve existing <br> tags
     result = result.replace(/(?<!>)\n(?!<)/g, '<br>');
+
+    // Restore task link anchors
+    result = result.replace(/\u0000AILINK(\d+)\u0000/g, (m, idx) => linkPlaceholders[Number(idx)] || '');
     
     return result;
 }
+
+// Clicking a task link inside the chat opens that task in place (no page reload).
+// The chat panel stays open underneath; the task modal is layered above it and
+// the chat (history, scroll position, typed text) is untouched when it closes.
+document.addEventListener('DOMContentLoaded', function() {
+    const chatMessages = document.getElementById('chatMessages');
+    const chatPanel = document.getElementById('chatbotPanel');
+    const cardModal = document.getElementById('cardModal');
+
+    // Whenever the task modal is visible, drop the chat panel beneath it (and
+    // beneath the modal's own sub-dialogs); restore when the modal is hidden.
+    if (chatPanel && cardModal && 'MutationObserver' in window) {
+        const syncChatLayer = () => {
+            chatPanel.classList.toggle('chatbot-under-task', !cardModal.classList.contains('hidden'));
+        };
+        new MutationObserver(syncChatLayer).observe(cardModal, { attributes: true, attributeFilter: ['class'] });
+        syncChatLayer();
+    }
+
+    if (!chatMessages) return;
+    chatMessages.addEventListener('click', function(event) {
+        const link = event.target.closest('a.ai-task-link');
+        if (!link) return;
+        const cardId = parseInt(link.getAttribute('data-card-id') || '', 10);
+        if (!cardId || typeof window.showCardDetails !== 'function') {
+            return; // fall back to normal navigation via href (deep link opens the task)
+        }
+        event.preventDefault();
+
+        const cardEl = document.getElementById(`card-${cardId}`);
+        if (cardEl && cardEl.scrollIntoView) {
+            cardEl.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        }
+        window.showCardDetails(cardId);
+    });
+});
 
 // Format history message (convert markdown to HTML)
 function formatHistoryMessage(text) {
@@ -5717,8 +5882,8 @@ function showTypingIndicator() {
     typingDiv.id = 'typingIndicator';
     typingDiv.className = 'flex gap-3 chat-bubble';
     typingDiv.innerHTML = `
-        <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-            <i class="fas fa-robot text-white text-sm"></i>
+        <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white">
+            ${PLANNER_AVATAR_SVG}
         </div>
         <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md">
             <div class="typing-indicator">
@@ -5753,12 +5918,12 @@ async function clearChat() {
     // Reset UI
     chatMessages.innerHTML = `
         <div class="flex gap-3">
-            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
-                <i class="fas fa-robot text-white text-sm"></i>
+            <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-white">
+                ${PLANNER_AVATAR_SVG}
             </div>
             <div class="bg-gray-100 dark:bg-gray-700 rounded-2xl rounded-tl-md px-4 py-3 max-w-[85%]">
                 <p class="text-sm text-gray-700 dark:text-gray-200">
-                    Hi! 👋 I'm your Planify Assistant. Ask me anything about this board - tasks, assignees, due dates, or get a quick summary!
+                    Hi! 👋 I'm <strong class="chat-highlight">Planner</strong>. Ask me anything about this board - tasks, assignees, due dates, or get a quick summary!
                 </p>
             </div>
         </div>
