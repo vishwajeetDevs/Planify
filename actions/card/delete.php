@@ -57,21 +57,22 @@ try {
         throw new Exception('User not authenticated');
     }
 
-    // First, verify the user has permission to delete this card
+    // Load the card and its board, then use the shared board permission check.
+    // This also supports board creators whose access does not rely on a
+    // board_members row.
     $stmt = $conn->prepare("
         SELECT c.id, c.title, l.board_id, b.name as board_name
         FROM cards c
         JOIN lists l ON c.list_id = l.id
         JOIN boards b ON l.board_id = b.id
-        JOIN board_members bm ON l.board_id = bm.board_id
-        WHERE c.id = ? AND bm.user_id = ? AND bm.role IN ('owner', 'admin', 'member')
+        WHERE c.id = ?
     ");
     
     if (!$stmt) {
         throw new Exception('Failed to prepare statement: ' . $conn->error);
     }
     
-    $stmt->bind_param("ii", $cardId, $userId);
+    $stmt->bind_param("i", $cardId);
     
     if (!$stmt->execute()) {
         throw new Exception('Failed to execute query: ' . $stmt->error);
@@ -80,7 +81,7 @@ try {
     $result = $stmt->get_result();
 
     if ($result->num_rows === 0) {
-        throw new Exception('Card not found or permission denied');
+        throw new Exception('Card not found');
     }
 
     // Get board ID and task info for activity log and notifications
@@ -88,6 +89,10 @@ try {
     $boardId = $boardData['board_id'] ?? 0;
     $taskTitle = $boardData['title'] ?? 'Task';
     $boardName = $boardData['board_name'] ?? '';
+
+    if (!canEditBoard($conn, $userId, $boardId)) {
+        throw new Exception('Permission denied');
+    }
     
     // Get assignees before deleting for email notification
     $assigneesStmt = $conn->prepare("

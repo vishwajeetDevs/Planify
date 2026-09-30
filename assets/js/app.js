@@ -1220,34 +1220,62 @@ function createList(e) {
     });
 }
 
-// Delete list
-function deleteList(listId) {
-    if (!confirm('Are you sure you want to delete this list? All cards in this list will be deleted.')) {
-        return;
-    }
-    
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
-    
-    fetch((window.BASE_PATH || '') + '/actions/list/delete.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': csrfToken || ''
-        },
-        body: JSON.stringify({ list_id: listId, _token: csrfToken })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.success) {
+// Delete list (fallback only).
+// board.php defines its own window.deleteList with board-specific DOM handling. This file loads
+// after the board's inline scripts, so a plain `function deleteList` declaration here would
+// overwrite that implementation. Only register a fallback when no page-level version exists.
+if (typeof window.deleteList !== 'function') {
+    window.deleteList = async function deleteList(listId) {
+        const numericListId = Number.parseInt(listId, 10);
+        if (!Number.isInteger(numericListId) || numericListId <= 0) {
+            showToast('Invalid list. Please refresh the page and try again.', 'error');
+            return;
+        }
+
+        const confirmed = typeof window.planifyConfirm === 'function'
+            ? await window.planifyConfirm({
+                title: 'Delete list?',
+                message: 'This list and all tasks inside it will be permanently removed.',
+                confirmLabel: 'Delete list',
+                danger: true
+            })
+            : window.confirm('Are you sure you want to delete this list? All cards in this list will be deleted.');
+
+        if (!confirmed) {
+            return;
+        }
+
+        try {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const response = await fetch((window.BASE_PATH || '') + '/actions/list/delete.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+                body: JSON.stringify({ list_id: numericListId, _token: csrfToken })
+            });
+
+            const data = await response.json().catch(() => ({}));
+            if (response.status === 401 && data.redirect) {
+                window.location.href = data.redirect;
+                return;
+            }
+            if (!response.ok || !data.success) {
+                throw new Error(data.message || 'Failed to delete list');
+            }
+
             showToast('List deleted successfully!', 'success');
             setTimeout(() => location.reload(), 1000);
-        } else {
-            showToast(data.message || 'Failed to delete list', 'error');
+        } catch (error) {
+            console.error('Error deleting list:', error);
+            showToast(error.message || 'An error occurred while deleting the list', 'error');
         }
-    })
-    .catch(err => {
-        showToast('An error occurred', 'error');
-    });
+    };
 }
 
 /** Show dashed "Add task" only when a list has zero cards. */
@@ -1682,84 +1710,97 @@ function updateCard(e, cardId) {
 }
 
 // Delete card
-function deleteCard(cardId) {
-    if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+window.deleteCard = async function deleteCard(cardId) {
+    const numericCardId = Number.parseInt(cardId, 10);
+    if (!Number.isInteger(numericCardId) || numericCardId <= 0) {
+        showToast('Invalid task. Please refresh the page and try again.', 'error');
         return;
     }
-    
-    // Show loading state
-    const deleteButton = document.querySelector(`[onclick*="deleteCard(${cardId})"]`);
+
+    const confirmed = typeof window.planifyConfirm === 'function'
+        ? await window.planifyConfirm({
+            title: 'Delete task?',
+            message: 'This task and its related checklist, comments, and attachments will be permanently removed.',
+            confirmLabel: 'Delete task',
+            danger: true
+        })
+        : window.confirm('Are you sure you want to delete this task? This action cannot be undone.');
+
+    if (!confirmed) {
+        return;
+    }
+
+    const deleteButton = document.querySelector(`[onclick*="deleteCard(${numericCardId})"]`);
     const originalContent = deleteButton ? deleteButton.innerHTML : '';
     if (deleteButton) {
-        deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Deleting...';
+        deleteButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
         deleteButton.disabled = true;
     }
-    
-    // Use absolute path for the delete endpoint
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-    fetch((window.BASE_PATH || '') + '/actions/card/delete.php', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest',
-            'X-CSRF-TOKEN': csrfToken,
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ 
-            id: cardId,
-            _token: csrfToken
-        })
-    })
-    .then(async response => {
+
+    try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const response = await fetch((window.BASE_PATH || '') + '/actions/card/delete.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            },
+            credentials: 'same-origin',
+            cache: 'no-store',
+            body: JSON.stringify({
+                id: numericCardId,
+                _token: csrfToken
+            })
+        });
+
         const data = await response.json().catch(() => ({}));
-        
-        // Handle authentication redirect
+
         if (response.status === 401 || data.redirect) {
             window.location.href = data.redirect || (window.BASE_PATH || '') + '/public/login.php';
             return;
         }
-        
-        if (!response.ok) {
-            throw new Error(data.message || `HTTP error! status: ${response.status}`);
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || `Unable to delete task (HTTP ${response.status})`);
         }
-        
-        if (data.success) {
-            showToast('Task deleted successfully', 'success');
-            const cardElement = document.querySelector(`[data-card-id="${cardId}"]`);
-            let listIdForSync = null;
-            if (cardElement) {
-                const listEl = cardElement.closest('[id^="list-"]');
-                if (listEl && listEl.dataset.listId) {
-                    listIdForSync = listEl.dataset.listId;
-                }
-                cardElement.style.opacity = '0';
-                setTimeout(() => {
-                    cardElement.remove();
-                    if (listIdForSync && typeof window.syncListAddTaskPrompt === 'function') {
-                        window.syncListAddTaskPrompt(listIdForSync);
-                    }
-                }, 300);
+
+        const cardElement = document.querySelector(`[data-card-id="${numericCardId}"]`);
+        const listEl = cardElement?.closest('[id^="list-"]');
+        const listIdForSync = listEl?.dataset.listId || null;
+
+        if (String(window.currentCardId || '') === String(numericCardId)) {
+            if (typeof window.closeCardModal === 'function') {
+                window.closeCardModal();
             }
-        } else {
-            throw new Error(data.message || 'Failed to delete task');
+            window.currentCardId = null;
         }
-    })
-    .catch(error => {
+
+        if (cardElement) {
+            cardElement.style.opacity = '0';
+            setTimeout(() => {
+                cardElement.remove();
+                if (listIdForSync && typeof window.syncListAddTaskPrompt === 'function') {
+                    window.syncListAddTaskPrompt(listIdForSync);
+                }
+            }, 200);
+        }
+
+        showToast('Task deleted successfully', 'success');
+    } catch (error) {
         console.error('Delete error:', error);
-        // Don't show error if we're already redirecting
         if (!window.location.href.includes('login.php')) {
-            showToast(`Error: ${error.message || 'Failed to delete task. Please try again.'}`, 'error');
+            showToast(error.message || 'Failed to delete task. Please try again.', 'error');
         }
-    })
-    .finally(() => {
-        if (deleteButton) {
+    } finally {
+        if (deleteButton && deleteButton.isConnected) {
             deleteButton.innerHTML = originalContent;
             deleteButton.disabled = false;
         }
-    });
-}
+    }
+};
 
 // Use the global escapeHtml function defined earlier in this file (window.escapeHtml)
 

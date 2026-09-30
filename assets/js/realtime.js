@@ -102,17 +102,42 @@
         root.id = 'card-' + card.id;
         root.dataset.cardId = String(card.id);
         root.className = 'group relative card-draggable cursor-grab active:cursor-grabbing' + (card.is_completed ? ' card-completed' : '');
+        const actions = window.boardCanEdit
+            ? '<div class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex gap-1 transition-opacity z-10">' +
+                '<button type="button" class="card-action-btn card-edit-action p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-primary dark:text-gray-300" title="Edit task" aria-label="Edit task"><i class="fas fa-pen text-[10px]"></i></button>' +
+                '<button type="button" class="card-action-btn card-delete-action p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-red-500 dark:text-gray-300" title="Delete task" aria-label="Delete task"><i class="fas fa-trash text-[10px]"></i></button>' +
+            '</div>'
+            : '';
         root.innerHTML =
             '<div class="block w-full rounded-lg border bg-white dark:bg-gray-800 border-gray-200/80 dark:border-gray-700 hover:shadow-md transition-all duration-150 overflow-hidden">' +
                 '<div class="p-2.5 sm:p-3">' +
                     '<h3 class="font-medium text-sm sm:text-base leading-tight text-gray-900 dark:text-gray-100"></h3>' +
                 '</div>' +
-            '</div>';
+            '</div>' +
+            actions;
         root.addEventListener('click', function () {
             if (!window.isDragging && window.showCardDetails) {
                 window.showCardDetails(card.id);
             }
         });
+        const editButton = root.querySelector('.card-edit-action');
+        if (editButton) {
+            editButton.addEventListener('click', function (event) {
+                event.stopPropagation();
+                if (window.showEditCardModal) {
+                    window.showEditCardModal(card.id);
+                }
+            });
+        }
+        const deleteButton = root.querySelector('.card-delete-action');
+        if (deleteButton) {
+            deleteButton.addEventListener('click', function (event) {
+                event.stopPropagation();
+                if (window.deleteCard) {
+                    window.deleteCard(card.id);
+                }
+            });
+        }
         applyCardFace(root, card);
         return root;
     }

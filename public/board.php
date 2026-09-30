@@ -2371,71 +2371,63 @@ async function updateList(event, listId) {
 }
 
 // Delete list
-async function deleteList(listId) {
-    const listTitle = document.querySelector(`[data-list-id="${listId}"] h3`)?.textContent || 'this list';
-    
-    const result = await Swal.fire({
-        title: 'Delete List?',
-        html: `Are you sure you want to delete <strong>${listTitle}</strong>?<br>This action cannot be undone and all tasks in this list will be permanently deleted.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#ef4444',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete it!',
-        cancelButtonText: 'Cancel',
-        reverseButtons: true,
-        focusCancel: true,
-        customClass: {
-            confirmButton: 'px-4 py-2 text-sm font-medium rounded-lg',
-            cancelButton: 'px-4 py-2 text-sm font-medium rounded-lg mr-2',
-            popup: 'dark:bg-gray-800 dark:text-white',
-            title: 'dark:text-white',
-            htmlContainer: 'dark:text-gray-300'
-        }
-    });
-
-    if (!result.isConfirmed) {
+window.deleteList = async function deleteList(listId) {
+    const numericListId = Number.parseInt(listId, 10);
+    if (!Number.isInteger(numericListId) || numericListId <= 0) {
+        showToast('Invalid list. Please refresh the page and try again.', 'error');
         return;
     }
-    
+
+    const listTitle = document.querySelector(`div.group\\/list[data-list-id="${numericListId}"] h3`)?.textContent?.trim() || 'this list';
+    const confirmed = typeof window.planifyConfirm === 'function'
+        ? await window.planifyConfirm({
+            title: 'Delete list?',
+            message: `"${listTitle}" and all tasks inside it will be permanently removed.`,
+            confirmLabel: 'Delete list',
+            danger: true
+        })
+        : window.confirm(`Delete "${listTitle}" and all tasks inside it? This action cannot be undone.`);
+
+    if (!confirmed) {
+        return;
+    }
+
     try {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         const response = await fetch(window.BASE_PATH + '/actions/list/delete.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json'
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
             },
+            credentials: 'same-origin',
+            cache: 'no-store',
             body: JSON.stringify({
-                list_id: listId,
-                board_id: boardId
+                list_id: numericListId,
+                board_id: boardId,
+                _token: csrfToken
             })
         });
-        
-        if (!response.ok) {
-            throw new Error('Failed to delete list');
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Remove the list from the UI
-            const listElement = document.querySelector(`[data-list-id="${listId}"]`);
-            if (listElement) {
-                listElement.style.opacity = '0';
-                setTimeout(() => listElement.remove(), 300);
-            }
-            
-            // Show success message
-            showToast('List deleted successfully!', 'success');
-        } else {
+
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) {
             throw new Error(data.message || 'Failed to delete list');
         }
+
+        const listElement = document.querySelector(`div.group\\/list[data-list-id="${numericListId}"]`);
+        if (listElement) {
+            listElement.style.opacity = '0';
+            setTimeout(() => listElement.remove(), 200);
+        }
+
+        showToast('List deleted successfully!', 'success');
     } catch (error) {
         console.error('Error deleting list:', error);
         showToast(error.message || 'An error occurred while deleting the list', 'error');
     }
-}
+};
 
 // Close all list menus when clicking outside
 document.addEventListener('DOMContentLoaded', function() {
@@ -3410,10 +3402,23 @@ function createCardHTML(card) {
     const isCompleted = card.is_completed ? 'card-completed' : '';
     const completedClass = card.is_completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-500';
     const titleClass = card.is_completed ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100';
+    const actionButtons = window.boardCanEdit ? `
+        <div class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex gap-1 transition-opacity z-10">
+            <button type="button" onclick="event.stopPropagation(); showEditCardModal(${card.id});"
+                    class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-primary dark:text-gray-300"
+                    title="Edit task" aria-label="Edit task">
+                <i class="fas fa-pen text-[10px]"></i>
+            </button>
+            <button type="button" onclick="event.stopPropagation(); window.deleteCard(${card.id});"
+                    class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-red-500 dark:text-gray-300"
+                    title="Delete task" aria-label="Delete task">
+                <i class="fas fa-trash text-[10px]"></i>
+            </button>
+        </div>` : '';
     
     return `
         <div id="card-${card.id}" data-card-id="${card.id}" class="group relative card-item ${isCompleted}" draggable="true">
-            <div onclick="window.openCardModal(${card.id})" class="block w-full rounded-xl p-3 text-left border bg-white dark:bg-gray-800 border-gray-200/80 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer">
+            <div onclick="window.showCardDetails(${card.id})" class="block w-full rounded-xl p-3 text-left border bg-white dark:bg-gray-800 border-gray-200/80 dark:border-gray-700 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer">
                 <div class="flex items-start gap-2">
                     <button type="button" onclick="event.stopPropagation(); window.toggleCardComplete(${card.id})" 
                             class="flex-shrink-0 w-4 h-4 mt-0.5 rounded-full border-2 ${completedClass} transition-all duration-200" 
@@ -3425,6 +3430,7 @@ function createCardHTML(card) {
                     </div>
                 </div>
             </div>
+            ${actionButtons}
         </div>
     `;
 }
@@ -4052,16 +4058,16 @@ document.addEventListener('keydown', (e) => {
     <div id="suggestedQuestions" class="p-3 bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-2">Quick questions:</p>
         <div class="flex flex-wrap gap-2">
-            <button onclick="askQuestion('What tasks are pending?')" class="chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('pending_tasks', 'Pending tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
                 Pending tasks
             </button>
-            <button onclick="askQuestion('Give me a board summary')" class="chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('board_summary', 'Board summary', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
                 Board summary
             </button>
-            <button onclick="askQuestion('What tasks are overdue?')" class="chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('overdue_tasks', 'Overdue tasks', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
                 Overdue tasks
             </button>
-            <button onclick="askQuestion('Who is assigned to tasks?')" class="chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
+            <button type="button" onclick="runQuickQuestion('assignees', 'Assignees', this)" class="chatbot-ai-control chatbot-quick-btn text-xs px-3 py-1.5 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-full transition-colors">
                 Assignees
             </button>
         </div>
@@ -4111,12 +4117,13 @@ document.addEventListener('keydown', (e) => {
     
     <!-- Input Area -->
     <div class="p-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 flex-shrink-0 mt-auto">
+        <div id="chatAiStatus" class="mb-2 hidden rounded-lg px-3 py-2 text-xs font-medium" role="status" aria-live="polite"></div>
         <div class="flex gap-2 items-end">
             <!-- Image Upload Button -->
             <input type="file" id="chatImageInput" accept="image/*" class="hidden" onchange="handleChatImageSelect(event)" multiple>
             <button 
                 onclick="document.getElementById('chatImageInput').click()"
-                class="p-2.5 text-gray-500 hover:text-neutral-900 dark:text-gray-400 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-all duration-200 flex-shrink-0"
+                class="chatbot-ai-control p-2.5 text-gray-500 hover:text-neutral-900 dark:text-gray-400 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-lg transition-all duration-200 flex-shrink-0"
                 title="Upload images (up to 5)"
             >
                 <i class="fas fa-image text-lg"></i>
@@ -4125,7 +4132,7 @@ document.addEventListener('keydown', (e) => {
             <input type="file" id="chatFileInput" accept=".pdf,.csv,.txt,.json,.xml,.md,.html,.css,.js,.py,.php,.sql,.log,.doc,.docx,.xls,.xlsx" class="hidden" onchange="handleChatFileSelect(event)" multiple>
             <button 
                 onclick="document.getElementById('chatFileInput').click()"
-                class="p-2.5 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 flex-shrink-0"
+                class="chatbot-ai-control p-2.5 text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-all duration-200 flex-shrink-0"
                 title="Upload files (PDF, CSV, TXT, code files)"
             >
                 <i class="fas fa-paperclip text-lg"></i>
@@ -4134,7 +4141,7 @@ document.addEventListener('keydown', (e) => {
                 id="chatInput"
                 placeholder="Ask about your tasks..."
                 rows="1"
-                class="chatbot-input flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 resize-none overflow-hidden"
+                class="chatbot-ai-control chatbot-input flex-1 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:border-transparent text-sm text-gray-900 dark:text-white placeholder-gray-400 resize-none overflow-hidden"
                 onkeydown="handleChatKeydown(event)"
                 oninput="autoResizeChatInput(this)"
                 onpaste="handleChatPaste(event)"
@@ -4142,7 +4149,7 @@ document.addEventListener('keydown', (e) => {
             <button 
                 id="chatSendBtn"
                 onclick="sendChatMessage()"
-                class="chatbot-theme-btn px-4 py-2.5 text-white rounded-lg transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                class="chatbot-ai-control chatbot-theme-btn px-4 py-2.5 text-white rounded-lg transition-all duration-200 flex items-center justify-center flex-shrink-0"
             >
                 <i class="fas fa-paper-plane"></i>
             </button>
@@ -4240,12 +4247,12 @@ document.addEventListener('keydown', (e) => {
         width: 100%;
         border-collapse: separate;
         border-spacing: 0;
-        margin: 12px 0;
+        margin: 0;
         font-size: 13px;
-        border-radius: 8px;
+        border-radius: 10px;
         overflow: hidden;
-        border: 2px solid var(--color-primary);
-        box-shadow: 0 2px 8px rgba(var(--color-primary-rgb), 0.15);
+        border: 1px solid rgba(var(--color-primary-rgb), 0.28);
+        box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
     }
     .ai-table th, .ai-table td {
         border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.2);
@@ -4260,13 +4267,12 @@ document.addEventListener('keydown', (e) => {
         border-bottom: none;
     }
     .ai-table th {
-        background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+        background: rgba(var(--color-primary-rgb), 0.1);
         font-weight: 600;
-        color: #ffffff;
-        text-transform: uppercase;
-        font-size: 11px;
-        letter-spacing: 0.5px;
-        border-bottom: 2px solid var(--color-primary-dark);
+        color: #111827;
+        font-size: 12px;
+        white-space: nowrap;
+        border-bottom: 1px solid rgba(var(--color-primary-rgb), 0.28);
     }
     .ai-table td {
         color: #374151;
@@ -4287,7 +4293,8 @@ document.addEventListener('keydown', (e) => {
         border-color: var(--color-primary-dark);
     }
     .dark .ai-table th {
-        background: linear-gradient(135deg, var(--color-primary-dark) 0%, var(--color-primary) 100%);
+        background: rgba(var(--color-primary-rgb), 0.22);
+        color: #f9fafb;
         border-bottom-color: var(--color-primary-dark);
     }
     .dark .ai-table td {
@@ -4295,10 +4302,23 @@ document.addEventListener('keydown', (e) => {
         background: rgba(var(--color-primary-rgb), 0.1);
     }
     .dark .ai-table tr:nth-child(even) td {
-        background: #312e81;
+        background: rgba(var(--color-primary-rgb), 0.16);
     }
     .dark .ai-table tr:hover td {
-        background: #3730a3;
+        background: rgba(var(--color-primary-rgb), 0.24);
+    }
+
+    .ai-response-bubble {
+        width: calc(100% - 2.75rem);
+        max-width: calc(100% - 2.75rem);
+    }
+    .ai-message-summary {
+        line-height: 1.55;
+    }
+    .ai-table-wrap {
+        margin-top: 0.75rem;
+        overflow-x: auto;
+        border-radius: 10px;
     }
     
     /* AI Message Content Styling */
@@ -4477,6 +4497,90 @@ document.addEventListener('keydown', (e) => {
 const currentBoardIdForChat = <?php echo $boardId; ?>;
 let isChatbotOpen = false;
 let chatHistoryLoaded = false;
+let chatAiAvailable = false;
+let chatAiRetryAt = 0;
+let chatAiStatusMessage = 'Checking AI availability…';
+let chatAiStatusChecking = false;
+let chatAiLastStatusCheck = 0;
+
+function formatChatCountdown(totalSeconds) {
+    const seconds = Math.max(0, Math.ceil(totalSeconds));
+    const minutes = Math.floor(seconds / 60);
+    const remainder = seconds % 60;
+    return minutes > 0 ? `${minutes}:${String(remainder).padStart(2, '0')}` : `${remainder}s`;
+}
+
+function renderChatAiStatus() {
+    const status = document.getElementById('chatAiStatus');
+    if (!status) return;
+
+    if (chatAiAvailable) {
+        status.className = 'mb-2 hidden rounded-lg px-3 py-2 text-xs font-medium';
+        status.textContent = '';
+        return;
+    }
+
+    const remaining = chatAiRetryAt
+        ? Math.max(0, Math.ceil((chatAiRetryAt - Date.now()) / 1000))
+        : 0;
+    const countdown = remaining > 0 ? ` Try again in ${formatChatCountdown(remaining)}.` : '';
+    status.className = 'mb-2 rounded-lg px-3 py-2 text-xs font-medium bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+    status.innerHTML = `<i class="fas fa-clock mr-1.5"></i>${escapeHtml(chatAiStatusMessage)}${countdown}`;
+}
+
+function applyChatAiAvailability(data) {
+    chatAiAvailable = !!data.ai_available;
+    chatAiStatusMessage = data.message || (chatAiAvailable ? 'AI is available.' : 'AI is temporarily unavailable.');
+    chatAiRetryAt = !chatAiAvailable && Number(data.retry_after) > 0
+        ? Date.now() + (Number(data.retry_after) * 1000)
+        : 0;
+
+    document.querySelectorAll('#chatbotPanel .chatbot-ai-control').forEach(control => {
+        control.disabled = !chatAiAvailable;
+        control.classList.toggle('opacity-50', !chatAiAvailable);
+        control.classList.toggle('cursor-not-allowed', !chatAiAvailable);
+    });
+    const imageInput = document.getElementById('chatImageInput');
+    const fileInput = document.getElementById('chatFileInput');
+    if (imageInput) imageInput.disabled = !chatAiAvailable;
+    if (fileInput) fileInput.disabled = !chatAiAvailable;
+    renderChatAiStatus();
+}
+
+async function checkChatAiAvailability() {
+    if (chatAiStatusChecking) return;
+    chatAiStatusChecking = true;
+    chatAiLastStatusCheck = Date.now();
+    try {
+        const response = await fetch(
+            `${window.BASE_PATH}/actions/ai/chat.php?board_id=${currentBoardIdForChat}&action=status`,
+            { cache: 'no-store' }
+        );
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'AI status check failed');
+        }
+        applyChatAiAvailability(data);
+    } catch (error) {
+        applyChatAiAvailability({
+            ai_available: false,
+            retry_after: 15,
+            message: 'AI availability could not be confirmed.'
+        });
+    } finally {
+        chatAiStatusChecking = false;
+    }
+}
+
+setInterval(() => {
+    if (chatAiAvailable) return;
+    renderChatAiStatus();
+    const retryFinished = chatAiRetryAt && Date.now() >= chatAiRetryAt;
+    const periodicRetry = !chatAiRetryAt && Date.now() - chatAiLastStatusCheck >= 30000;
+    if (retryFinished || periodicRetry) {
+        checkChatAiAvailability();
+    }
+}, 1000);
 
 // ========================================
 // Chatbot Resize Functionality
@@ -4495,6 +4599,12 @@ let resizeStartWidth = 0;
 // Initialize chatbot resize on DOM ready
 document.addEventListener('DOMContentLoaded', function() {
     initChatbotResize();
+    applyChatAiAvailability({
+        ai_available: false,
+        retry_after: 0,
+        message: 'Checking AI availability…'
+    });
+    checkChatAiAvailability();
 });
 
 function initChatbotResize() {
@@ -4726,6 +4836,7 @@ function toggleChatbot() {
     if (isChatbotOpen) {
         panel.classList.remove('translate-x-full');
         toggleBtn.classList.add('hidden');
+        checkChatAiAvailability();
         
         // Restore fullscreen, custom width, or apply default width
         if (isChatbotFullscreen) {
@@ -4783,6 +4894,60 @@ async function loadChatHistory() {
 function askQuestion(question) {
     document.getElementById('chatInput').value = question;
     sendChatMessage();
+}
+
+// Execute predefined board queries directly; no LLM request is made.
+async function runQuickQuestion(action, label, button) {
+    if (!action || !currentBoardIdForChat || !chatAiAvailable || (button && button.disabled)) {
+        if (!chatAiAvailable) checkChatAiAvailability();
+        return;
+    }
+
+    addMessageToChat(label, 'user');
+    showTypingIndicator();
+    // Keep the thinking indicator visible long enough to avoid an abrupt
+    // flash when the database responds immediately.
+    const minimumThinkingTime = new Promise(resolve => {
+        const delay = 2000 + Math.floor(Math.random() * 1001);
+        setTimeout(resolve, delay);
+    });
+    if (button) {
+        button.disabled = true;
+        button.classList.add('opacity-60', 'cursor-wait');
+    }
+
+    try {
+        const response = await fetch(`${window.BASE_PATH}/actions/ai/chat.php`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                board_id: currentBoardIdForChat,
+                quick_action: action
+            })
+        });
+        const data = await response.json();
+        await minimumThinkingTime;
+        hideTypingIndicator();
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.message || 'Could not load this information');
+        }
+        addMessageToChat(data.response, 'ai', data.table_html || null);
+    } catch (error) {
+        await minimumThinkingTime;
+        hideTypingIndicator();
+        addMessageToChat(
+            `⚠️ ${error.message || 'Could not load this information. Please try again.'}`,
+            'ai',
+            null,
+            true
+        );
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('opacity-60', 'cursor-wait');
+        }
+    }
 }
 
 // Handle keyboard events in chat input
@@ -5211,6 +5376,10 @@ function formatFileSize(bytes) {
 
 async function sendChatMessage() {
     const input = document.getElementById('chatInput');
+    if (!chatAiAvailable) {
+        checkChatAiAvailability();
+        return;
+    }
     const message = input.value.trim();
     const hasFiles = chatFilesArray.length > 0;
     
@@ -5276,7 +5445,11 @@ async function sendChatMessage() {
         const contentType = response.headers.get('content-type');
         if (!contentType || !contentType.includes('application/json')) {
             hideTypingIndicator();
-            addMessageToChat('⚠️ AI Chatbot is not available on this hosting. The server is blocking API requests. Please use localhost or a different hosting provider.', 'ai', null, true);
+            applyChatAiAvailability({
+                ai_available: false,
+                retry_after: 30,
+                message: 'AI is temporarily unavailable.'
+            });
             return;
         }
         
@@ -5286,6 +5459,11 @@ async function sendChatMessage() {
         hideTypingIndicator();
         
         if (data.success) {
+            applyChatAiAvailability({
+                ai_available: true,
+                retry_after: 0,
+                message: 'AI is available.'
+            });
             // Add AI response (works for both AI API and fallback responses)
             if (data.has_table && data.table_html) {
                 addMessageToChat(data.response, 'ai', data.table_html);
@@ -5298,6 +5476,10 @@ async function sendChatMessage() {
                 console.log('AI Assistant: Running in offline/fallback mode');
             }
         } else {
+            if (data.ai_available === false) {
+                applyChatAiAvailability(data);
+                return;
+            }
             // Format error message nicely
             let errorMsg = data.message || 'Sorry, I encountered an error. Please try again.';
             addMessageToChat(errorMsg, 'ai', null, true);
@@ -5305,18 +5487,11 @@ async function sendChatMessage() {
     } catch (error) {
         hideTypingIndicator();
         console.error('Chat error:', error);
-        
-        // Provide more helpful error message based on error type
-        let errorMessage = '⚠️ Unable to connect to the AI service.';
-        if (error.name === 'TypeError' && error.message.includes('Failed to fetch')) {
-            errorMessage = '⚠️ Cannot reach the server. Make sure XAMPP/Apache is running.';
-        } else if (error.name === 'SyntaxError') {
-            errorMessage = '⚠️ Server returned an invalid response. Check PHP error logs.';
-        } else if (error.message) {
-            errorMessage = '⚠️ Error: ' + error.message;
-        }
-        
-        addMessageToChat(errorMessage, 'ai', null, true);
+        applyChatAiAvailability({
+            ai_available: false,
+            retry_after: 15,
+            message: 'AI is temporarily unavailable.'
+        });
     }
 }
 
@@ -5409,30 +5584,29 @@ function addMessageToChat(message, sender, tableHtml = null, isError = false, is
         const bgColor = isError ? 'bg-red-50 dark:bg-red-900/30' : 'bg-gray-100 dark:bg-gray-700';
         const textColor = isError ? 'text-red-600 dark:text-red-400' : 'text-gray-700 dark:text-gray-200';
         
-        // Format the message with markdown parsing
+        // Format every stored/live response consistently. In particular,
+        // fallback responses can contain markdown tables without table_html.
         let displayMessage = message;
         let displayTable = tableHtml;
         
-        if (isFromHistory && !tableHtml) {
-            // Check if history message contains a markdown table
+        if (!tableHtml) {
             const formattedResult = formatHistoryMessage(message);
             displayMessage = formattedResult.text;
             displayTable = formattedResult.tableHtml;
-        } else if (!isFromHistory) {
-            // For live messages, also parse markdown (may already have some HTML like <br>)
-            displayMessage = parseMarkdownToHtml(message);
         }
         
-        let content = `<div class="text-sm ${textColor} ai-message-content">${displayMessage}</div>`;
+        let content = displayMessage
+            ? `<div class="text-sm ${textColor} ai-message-content ai-message-summary">${displayMessage}</div>`
+            : '';
         if (displayTable) {
-            content += `<div class="mt-2 overflow-x-auto">${displayTable}</div>`;
+            content += `<div class="ai-table-wrap">${displayTable}</div>`;
         }
         
         messageDiv.innerHTML = `
             <div class="chatbot-avatar w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0">
                 <i class="fas fa-robot text-white text-sm"></i>
             </div>
-            <div class="${bgColor} rounded-2xl rounded-tl-md px-4 py-3 max-w-[85%]">
+            <div class="${bgColor} ai-response-bubble rounded-2xl rounded-tl-md px-4 py-3">
                 ${content}
             </div>
         `;
@@ -5489,49 +5663,50 @@ function parseMarkdownToHtml(text) {
 
 // Format history message (convert markdown to HTML)
 function formatHistoryMessage(text) {
-    let tableHtml = null;
-    let summaryText = text;
-    
-    // Check for markdown table
-    if (text.includes('|') && text.includes('\n|')) {
-        const lines = text.split('\n');
-        let inTable = false;
-        let tableLines = [];
-        let textLines = [];
-        
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (/^\|.*\|$/.test(trimmed)) {
-                // Skip separator row
-                if (/^\|[-:| ]+\|$/.test(trimmed)) continue;
-                inTable = true;
-                tableLines.push(trimmed);
+    const lines = String(text || '').split(/\r?\n/);
+    const textLines = [];
+    const tables = [];
+    let tableLines = [];
+
+    const flushTable = () => {
+        if (!tableLines.length) return;
+        const rows = tableLines.filter(line => !/^\|[-:| ]+\|$/.test(line));
+        tableLines = [];
+        if (!rows.length) return;
+
+        let html = '<table class="ai-table">';
+        rows.forEach((line, index) => {
+            const cells = line.slice(1, -1).split('|').map(cell => cell.trim());
+            if (index === 0) {
+                html += '<thead><tr>' +
+                    cells.map(cell => `<th>${parseMarkdownToHtml(cell)}</th>`).join('') +
+                    '</tr></thead><tbody>';
             } else {
-                if (inTable && trimmed === '') continue; // Skip empty lines after table
-                inTable = false;
-                if (trimmed) textLines.push(trimmed);
+                html += '<tr>' +
+                    cells.map(cell => `<td>${parseMarkdownToHtml(cell)}</td>`).join('') +
+                    '</tr>';
             }
+        });
+        html += '</tbody></table>';
+        tables.push(html);
+    };
+
+    lines.forEach(line => {
+        const trimmed = line.trim();
+        if (/^\|.*\|$/.test(trimmed)) {
+            tableLines.push(trimmed);
+            return;
         }
-        
-        if (tableLines.length > 0) {
-            tableHtml = '<table class="ai-table">';
-            tableLines.forEach((line, index) => {
-                const cells = line.split('|').filter(c => c.trim()).map(c => c.trim());
-                if (index === 0) {
-                    tableHtml += '<thead><tr>' + cells.map(c => `<th>${parseMarkdownToHtml(c)}</th>`).join('') + '</tr></thead><tbody>';
-                } else {
-                    tableHtml += '<tr>' + cells.map(c => `<td>${parseMarkdownToHtml(c)}</td>`).join('') + '</tr>';
-                }
-            });
-            tableHtml += '</tbody></table>';
-        }
-        
-        summaryText = textLines.join('\n');
-    }
-    
-    // Apply markdown parsing
-    summaryText = parseMarkdownToHtml(summaryText);
-    
+        flushTable();
+        if (trimmed) textLines.push(trimmed);
+    });
+    flushTable();
+
+    const summaryText = parseMarkdownToHtml(textLines.join('\n'));
+    const tableHtml = tables.length
+        ? tables.map((table, index) => `${index ? '<div class="mt-3"></div>' : ''}${table}`).join('')
+        : null;
+
     return { text: summaryText, tableHtml };
 }
 

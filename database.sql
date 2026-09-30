@@ -550,6 +550,15 @@ CREATE TABLE IF NOT EXISTS ai_chat_logs (
     FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
+-- Shared AI provider cooldown/status. When the upstream service reports a
+-- quota or availability error, all chatbot clients use the same retry time.
+CREATE TABLE IF NOT EXISTS ai_service_status (
+    provider VARCHAR(50) PRIMARY KEY,
+    unavailable_until DATETIME DEFAULT NULL,
+    reason_code VARCHAR(50) DEFAULT NULL,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
 -- ============================================================
 -- AI Chat Messages (for conversation history)
 -- ============================================================

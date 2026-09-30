@@ -67,6 +67,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $history = getChatHistory($conn, $userId, $boardId);
         echo json_encode(['success' => true, 'messages' => $history]);
         exit;
+    } elseif ($action === 'status') {
+        $status = getAIAvailabilityStatus($conn, $userId);
+        echo json_encode(array_merge(['success' => true], $status));
+        exit;
     } elseif ($action === 'clear') {
         // Clear chat history for this user and board
         clearChatHistory($conn, $userId, $boardId);
@@ -88,6 +92,47 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $input = json_decode(file_get_contents('php://input'), true);
 $boardId = isset($input['board_id']) ? (int)$input['board_id'] : 0;
 $userMessage = trim($input['message'] ?? '');
+$quickAction = trim($input['quick_action'] ?? '');
+
+// Predefined quick questions are database queries, not AI requests.
+if ($quickAction !== '') {
+    if (!$boardId) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Board ID is required']);
+        exit;
+    }
+    if (!hasAccessToBoard($conn, $userId, $boardId)) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'message' => 'You do not have access to this board']);
+        exit;
+    }
+
+    try {
+        ensureChatMessagesTable($conn);
+        $quickResult = executeQuickQuestion($conn, $boardId, $quickAction);
+        if (!$quickResult) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'Unknown quick question']);
+            exit;
+        }
+
+        saveChatMessage($conn, $userId, $boardId, 'user', $quickResult['label']);
+        saveChatMessage($conn, $userId, $boardId, 'assistant', $quickResult['history_text']);
+
+        echo json_encode([
+            'success' => true,
+            'direct_query' => true,
+            'response' => $quickResult['summary'],
+            'has_table' => true,
+            'table_html' => $quickResult['table_html'],
+        ]);
+    } catch (Throwable $e) {
+        error_log('Quick question error: ' . $e->getMessage());
+        http_response_code(500);
+        echo json_encode(['success' => false, 'message' => 'Could not load this board information']);
+    }
+    exit;
+}
 
 // Handle file data (images and documents) - support multiple files
 $filesData = $input['files'] ?? null; // New: array of files
@@ -124,17 +169,24 @@ if (empty($userMessage) && !empty($filesData)) {
     }
 }
 
-// Check rate limiting
-if (!checkRateLimit($conn, $userId)) {
-    http_response_code(429);
-    echo json_encode(['success' => false, 'message' => 'Too many requests. Please wait a moment.']);
-    exit;
-}
-
 // Verify user has access to the board
 if (!hasAccessToBoard($conn, $userId, $boardId)) {
     http_response_code(403);
     echo json_encode(['success' => false, 'message' => 'You do not have access to this board']);
+    exit;
+}
+
+$availability = getAIAvailabilityStatus($conn, $userId);
+if (!$availability['ai_available']) {
+    $statusCode = $availability['reason_code'] === 'rate_limit' ? 429 : 503;
+    http_response_code($statusCode);
+    if ($availability['retry_after'] > 0) {
+        header('Retry-After: ' . $availability['retry_after']);
+    }
+    echo json_encode(array_merge([
+        'success' => false,
+        'message' => $availability['message'],
+    ], $availability));
     exit;
 }
 
@@ -148,24 +200,10 @@ try {
     if (!$boardData) {
         throw new Exception('Failed to fetch board data');
     }
-    
-    // Check if AI is properly configured - if not, use fallback immediately
-    if (!isAIConfigured()) {
-        $fallbackResponse = generateFallbackResponse($userMessage, $boardData, $userName);
-        if ($fallbackResponse) {
-            saveChatMessage($conn, $userId, $boardId, 'user', $userMessage);
-            saveChatMessage($conn, $userId, $boardId, 'assistant', $fallbackResponse);
-            echo json_encode([
-                'success' => true,
-                'response' => $fallbackResponse,
-                'fallback' => true
-            ]);
-            exit;
-        }
-    }
-    
-    // Get conversation history for context (last 10 messages)
-    $conversationHistory = getChatHistory($conn, $userId, $boardId, 10);
+
+    // Load the latest conversation before choosing AI or offline mode so both
+    // paths can understand follow-up questions.
+    $conversationHistory = getChatHistory($conn, $userId, $boardId, 20);
     
     // Save user message to history (note if files were included)
     $fileNote = '';
@@ -180,7 +218,6 @@ try {
         }
     }
     $messageToSave = $fileNote . $userMessage;
-    saveChatMessage($conn, $userId, $boardId, 'user', $messageToSave);
     
     // Process all files for AI (extract text content for non-image files)
     $processedFilesData = [];
@@ -200,58 +237,43 @@ try {
     $aiResponse = callGeminiAPI($prompt, $processedFilesData);
     
     if (!$aiResponse['success']) {
-        // Check if it's a hosting/connection issue OR rate limit - use fallback responses
         $errorMsg = strtolower($aiResponse['error'] ?? '');
-        $shouldUseFallback = (
-            strpos($errorMsg, 'not available') !== false ||
-            strpos($errorMsg, 'not found') !== false ||
-            strpos($errorMsg, 'blocked') !== false ||
-            strpos($errorMsg, 'connection error') !== false ||
-            strpos($errorMsg, 'resolve') !== false ||
-            strpos($errorMsg, 'connect') !== false ||
+        $isRateLimit = (
             strpos($errorMsg, 'quota') !== false ||
             strpos($errorMsg, 'rate limit') !== false ||
-            strpos($errorMsg, 'busy') !== false ||
             strpos($errorMsg, 'free tier') !== false ||
-            strpos($errorMsg, 'service error') !== false ||
-            strpos($errorMsg, 'temporarily unavailable') !== false ||
-            strpos($errorMsg, 'ssl') !== false ||
-            strpos($errorMsg, 'certificate') !== false ||
-            strpos($errorMsg, 'curl') !== false ||
-            strpos($errorMsg, 'no response') !== false ||
-            strpos($errorMsg, 'failed to initialize') !== false
+            strpos($errorMsg, 'busy') !== false
         );
-        
-        if ($shouldUseFallback) {
-            // Generate fallback response based on board data
-            $fallbackResponse = generateFallbackResponse($userMessage, $boardData, $userName);
-            
-            if ($fallbackResponse) {
-                // Save fallback response to history
-                saveChatMessage($conn, $userId, $boardId, 'assistant', $fallbackResponse);
-                
-                echo json_encode([
-                    'success' => true,
-                    'response' => $fallbackResponse,
-                    'fallback' => true // Flag to indicate this is a fallback response
-                ]);
-                exit;
-            }
-        }
-        
-        // Return the error directly if no fallback available
+        $retryAfter = max(5, (int) ($aiResponse['retry_after'] ?? ($isRateLimit ? 60 : 30)));
+        $reasonCode = $isRateLimit ? 'rate_limit' : 'unavailable';
+        setAIUnavailable($conn, $retryAfter, $reasonCode);
+
         error_log("AI Chat Error: " . ($aiResponse['error'] ?? 'AI request failed'));
-        echo json_encode(['success' => false, 'message' => $aiResponse['error'] ?? 'AI request failed']);
+        http_response_code($isRateLimit ? 429 : 503);
+        header('Retry-After: ' . $retryAfter);
+        echo json_encode([
+            'success' => false,
+            'ai_available' => false,
+            'reason_code' => $reasonCode,
+            'retry_after' => $retryAfter,
+            'message' => $isRateLimit
+                ? 'AI usage limit reached. Chat will unlock automatically when the limit refreshes.'
+                : 'AI is temporarily unavailable. Chat will retry automatically.',
+        ]);
         exit;
     }
+
+    clearAIUnavailable($conn);
     
     // Log the request for rate limiting
     logAIRequest($conn, $userId, $boardId);
     
     // Parse and format the response
-    $formattedResponse = formatAIResponse($aiResponse['response']);
+    $formattedResponse = formatAIResponse($aiResponse['response'], $userMessage);
     
-    // Save AI response to history
+    // Save only successful exchanges. Failed attempts should not pollute
+    // conversation context or reappear after a reload.
+    saveChatMessage($conn, $userId, $boardId, 'user', $messageToSave);
     saveChatMessage($conn, $userId, $boardId, 'assistant', $aiResponse['response']);
     
     echo json_encode([
@@ -265,6 +287,231 @@ try {
     error_log("AI Chat Error: " . $e->getMessage());
     http_response_code(500);
     echo json_encode(['success' => false, 'message' => 'Sorry, I encountered an error. Please try again.']);
+}
+
+// ============================================================
+// DIRECT DATABASE QUICK QUESTIONS
+// ============================================================
+
+/**
+ * Execute one configured quick question and return presentation-ready data.
+ * Adding another quick question only requires a SQL query, label and columns.
+ */
+function executeQuickQuestion($conn, int $boardId, string $action): ?array {
+    $configs = [
+        'pending_tasks' => [
+            'label' => 'Pending tasks',
+            'sql' => "
+                SELECT c.id AS card_id, c.title AS task, l.title AS list_name,
+                       c.due_date, c.priority
+                FROM cards c
+                INNER JOIN lists l ON l.id = c.list_id
+                WHERE l.board_id = ? AND l.is_archived = 0 AND c.is_completed = 0
+                ORDER BY
+                    CASE c.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2
+                                    WHEN 'medium' THEN 3 ELSE 4 END,
+                    c.due_date IS NULL, c.due_date, c.position
+            ",
+            'columns' => [
+                ['key' => 'task', 'label' => 'Task'],
+                ['key' => 'list_name', 'label' => 'List'],
+                ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
+                ['key' => 'priority', 'label' => 'Priority', 'format' => 'priority'],
+            ],
+        ],
+        'board_summary' => [
+            'label' => 'Board summary',
+            'sql' => "
+                SELECT l.id AS list_id, l.title AS list_name,
+                       COUNT(c.id) AS total_tasks,
+                       COALESCE(SUM(c.is_completed = 0), 0) AS pending_tasks,
+                       COALESCE(SUM(c.is_completed = 1), 0) AS completed_tasks,
+                       COALESCE(SUM(c.is_completed = 0 AND c.due_date IS NOT NULL
+                                    AND c.due_date < CURDATE()), 0) AS overdue_tasks
+                FROM lists l
+                LEFT JOIN cards c ON c.list_id = l.id
+                WHERE l.board_id = ? AND l.is_archived = 0
+                GROUP BY l.id, l.title, l.position
+                ORDER BY l.position, l.id
+            ",
+            'columns' => [
+                ['key' => 'list_name', 'label' => 'List'],
+                ['key' => 'total_tasks', 'label' => 'Total'],
+                ['key' => 'pending_tasks', 'label' => 'Pending'],
+                ['key' => 'completed_tasks', 'label' => 'Completed'],
+                ['key' => 'overdue_tasks', 'label' => 'Overdue'],
+            ],
+        ],
+        'overdue_tasks' => [
+            'label' => 'Overdue tasks',
+            'sql' => "
+                SELECT c.id AS card_id, c.title AS task, l.title AS list_name,
+                       c.due_date,
+                       DATEDIFF(CURDATE(), c.due_date) AS days_overdue,
+                       c.priority
+                FROM cards c
+                INNER JOIN lists l ON l.id = c.list_id
+                WHERE l.board_id = ? AND l.is_archived = 0
+                      AND c.is_completed = 0
+                      AND c.due_date IS NOT NULL
+                      AND c.due_date < CURDATE()
+                ORDER BY c.due_date, c.position
+            ",
+            'columns' => [
+                ['key' => 'task', 'label' => 'Task'],
+                ['key' => 'list_name', 'label' => 'List'],
+                ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
+                ['key' => 'days_overdue', 'label' => 'Days Overdue'],
+                ['key' => 'priority', 'label' => 'Priority', 'format' => 'priority'],
+            ],
+        ],
+        'assignees' => [
+            'label' => 'Assignees',
+            'sql' => "
+                SELECT c.id AS card_id, u.name AS assignee, c.title AS task,
+                       l.title AS list_name,
+                       CASE WHEN c.is_completed = 1 THEN 'Completed'
+                            WHEN c.due_date IS NOT NULL AND c.due_date < CURDATE() THEN 'Overdue'
+                            ELSE 'Pending' END AS task_status,
+                       c.due_date
+                FROM card_assignees ca
+                INNER JOIN users u ON u.id = ca.user_id
+                INNER JOIN cards c ON c.id = ca.card_id
+                INNER JOIN lists l ON l.id = c.list_id
+                WHERE l.board_id = ? AND l.is_archived = 0
+                ORDER BY u.name, c.is_completed, c.due_date IS NULL, c.due_date, c.position
+            ",
+            'columns' => [
+                ['key' => 'assignee', 'label' => 'Assignee'],
+                ['key' => 'task', 'label' => 'Task'],
+                ['key' => 'list_name', 'label' => 'List'],
+                ['key' => 'task_status', 'label' => 'Status'],
+                ['key' => 'due_date', 'label' => 'Due Date', 'format' => 'date'],
+            ],
+        ],
+    ];
+
+    if (!isset($configs[$action])) {
+        return null;
+    }
+
+    $config = $configs[$action];
+    $stmt = $conn->prepare($config['sql']);
+    if (!$stmt) {
+        throw new RuntimeException('Could not prepare quick-question query');
+    }
+    $stmt->bind_param('i', $boardId);
+    $stmt->execute();
+    $rows = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+    $stmt->close();
+
+    $boardStmt = $conn->prepare('SELECT name FROM boards WHERE id = ?');
+    $boardStmt->bind_param('i', $boardId);
+    $boardStmt->execute();
+    $boardName = (string) ($boardStmt->get_result()->fetch_assoc()['name'] ?? 'this board');
+    $boardStmt->close();
+
+    $summary = buildQuickQuestionSummary($action, $rows, $boardName);
+    $tableHtml = buildQuickQuestionTable($config['columns'], $rows);
+    $historyText = html_entity_decode(strip_tags(str_replace('<br>', "\n", $summary)), ENT_QUOTES, 'UTF-8')
+        . "\n\n" . buildQuickQuestionMarkdownTable($config['columns'], $rows);
+
+    return [
+        'label' => $config['label'],
+        'summary' => $summary,
+        'table_html' => $tableHtml,
+        'history_text' => $historyText,
+    ];
+}
+
+function buildQuickQuestionSummary(string $action, array $rows, string $boardName): string {
+    $safeBoard = htmlspecialchars($boardName, ENT_QUOTES, 'UTF-8');
+    $count = count($rows);
+
+    if ($action === 'pending_tasks') {
+        $overdue = count(array_filter($rows, fn($row) =>
+            !empty($row['due_date']) && $row['due_date'] < date('Y-m-d')
+        ));
+        return "<strong>{$count} pending task" . ($count === 1 ? '' : 's') . "</strong> found on {$safeBoard}.<br>"
+            . ($overdue ? "{$overdue} of them are already overdue and need attention." : 'None of these tasks are currently overdue.');
+    }
+
+    if ($action === 'overdue_tasks') {
+        return $count
+            ? "<strong>{$count} overdue task" . ($count === 1 ? '' : 's') . "</strong> found on {$safeBoard}.<br>They are ordered by the oldest due date first."
+            : "<strong>No overdue tasks</strong> were found on {$safeBoard}.<br>All incomplete tasks are still within their due dates.";
+    }
+
+    if ($action === 'board_summary') {
+        $total = array_sum(array_column($rows, 'total_tasks'));
+        $pending = array_sum(array_column($rows, 'pending_tasks'));
+        $completed = array_sum(array_column($rows, 'completed_tasks'));
+        $overdue = array_sum(array_column($rows, 'overdue_tasks'));
+        return "<strong>{$safeBoard}</strong> has " . count($rows) . " list" . (count($rows) === 1 ? '' : 's')
+            . " and {$total} task" . ($total === 1 ? '' : 's') . ".<br>"
+            . "{$pending} pending, {$completed} completed, and {$overdue} overdue.";
+    }
+
+    $assignees = array_unique(array_column($rows, 'assignee'));
+    $tasks = array_unique(array_column($rows, 'card_id'));
+    return $count
+        ? '<strong>' . count($assignees) . ' assignee' . (count($assignees) === 1 ? '' : 's')
+            . '</strong> are assigned to ' . count($tasks) . ' task' . (count($tasks) === 1 ? '' : 's')
+            . " on {$safeBoard}.<br>Each assignment is listed below with its current status."
+        : "<strong>No task assignments</strong> were found on {$safeBoard}.<br>Tasks can be assigned from the task details panel.";
+}
+
+function buildQuickQuestionTable(array $columns, array $rows): string {
+    $html = '<table class="ai-table"><thead><tr><th>#</th>';
+    foreach ($columns as $column) {
+        $html .= '<th>' . htmlspecialchars($column['label'], ENT_QUOTES, 'UTF-8') . '</th>';
+    }
+    $html .= '</tr></thead><tbody>';
+
+    if (!$rows) {
+        return $html . '<tr><td colspan="' . (count($columns) + 1)
+            . '" class="text-center">No records found</td></tr></tbody></table>';
+    }
+
+    foreach ($rows as $index => $row) {
+        $html .= '<tr><td>' . ($index + 1) . '</td>';
+        foreach ($columns as $column) {
+            $value = formatQuickQuestionValue($row[$column['key']] ?? null, $column['format'] ?? null);
+            $html .= '<td>' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</td>';
+        }
+        $html .= '</tr>';
+    }
+    return $html . '</tbody></table>';
+}
+
+function buildQuickQuestionMarkdownTable(array $columns, array $rows): string {
+    $labels = array_merge(['#'], array_column($columns, 'label'));
+    $markdown = '| ' . implode(' | ', $labels) . " |\n";
+    $markdown .= '| ' . implode(' | ', array_fill(0, count($labels), '---')) . " |\n";
+    foreach ($rows as $index => $row) {
+        $values = [$index + 1];
+        foreach ($columns as $column) {
+            $value = formatQuickQuestionValue($row[$column['key']] ?? null, $column['format'] ?? null);
+            $values[] = str_replace('|', '\|', $value);
+        }
+        $markdown .= '| ' . implode(' | ', $values) . " |\n";
+    }
+    return $markdown;
+}
+
+function formatQuickQuestionValue($value, ?string $format = null): string {
+    if ($value === null || $value === '') {
+        return '—';
+    }
+    if ($format === 'date') {
+        return date('M j, Y', strtotime((string) $value));
+    }
+    if ($format === 'priority') {
+        $priority = strtolower((string) $value);
+        $icon = in_array($priority, ['urgent', 'high'], true) ? '🔴' : ($priority === 'medium' ? '🟡' : '🟢');
+        return $icon . ' ' . ucfirst($priority);
+    }
+    return (string) $value;
 }
 
 // ============================================================
@@ -294,11 +541,15 @@ function ensureChatMessagesTable($conn) {
  */
 function getChatHistory($conn, $userId, $boardId, $limit = 50) {
     $stmt = $conn->prepare("
-        SELECT role, message, created_at 
-        FROM ai_chat_messages 
-        WHERE user_id = ? AND board_id = ?
-        ORDER BY created_at ASC
-        LIMIT ?
+        SELECT role, message, created_at
+        FROM (
+            SELECT id, role, message, created_at
+            FROM ai_chat_messages
+            WHERE user_id = ? AND board_id = ?
+            ORDER BY id DESC
+            LIMIT ?
+        ) AS recent_messages
+        ORDER BY id ASC
     ");
     
     if (!$stmt) {
@@ -308,10 +559,19 @@ function getChatHistory($conn, $userId, $boardId, $limit = 50) {
     $stmt->bind_param("iii", $userId, $boardId, $limit);
     $stmt->execute();
     $result = $stmt->get_result();
-    $messages = [];
+    $rawMessages = [];
     
     while ($row = $result->fetch_assoc()) {
-        $messages[] = [
+        // Operational notices belong in the status banner, not chat history.
+        if ($row['role'] === 'assistant' && preg_match(
+            '/running in offline mode|AI temporarily busy|full AI capabilities to restore|'
+            . 'checking whether AI is available|AI is temporarily unavailable|'
+            . 'chat will retry|usage limit.*refresh|unable to connect to the AI/i',
+            $row['message']
+        )) {
+            continue;
+        }
+        $rawMessages[] = [
             'role' => $row['role'],
             'message' => $row['message'],
             'timestamp' => $row['created_at']
@@ -319,6 +579,22 @@ function getChatHistory($conn, $userId, $boardId, $limit = 50) {
     }
     
     $stmt->close();
+
+    // Successful requests are stored as user/assistant pairs. Hide user
+    // messages left orphaned by older failed requests.
+    $messages = [];
+    $messageCount = count($rawMessages);
+    for ($i = 0; $i < $messageCount; $i++) {
+        $message = $rawMessages[$i];
+        if ($message['role'] === 'user') {
+            $next = $rawMessages[$i + 1] ?? null;
+            if (!$next || $next['role'] !== 'assistant') {
+                continue;
+            }
+        }
+        $messages[] = $message;
+    }
+
     return $messages;
 }
 
@@ -371,6 +647,129 @@ function clearChatHistory($conn, $userId, $boardId) {
 // ============================================================
 // RATE LIMITING FUNCTIONS
 // ============================================================
+
+function ensureAIServiceStatusTable($conn): void {
+    $conn->query("
+        CREATE TABLE IF NOT EXISTS ai_service_status (
+            provider VARCHAR(50) PRIMARY KEY,
+            unavailable_until DATETIME DEFAULT NULL,
+            reason_code VARCHAR(50) DEFAULT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB
+    ");
+}
+
+function setAIUnavailable($conn, int $retryAfter, string $reasonCode): void {
+    ensureAIServiceStatusTable($conn);
+    $provider = AI_PROVIDER;
+    $unavailableUntil = date('Y-m-d H:i:s', time() + max(5, $retryAfter));
+    $stmt = $conn->prepare("
+        INSERT INTO ai_service_status (provider, unavailable_until, reason_code)
+        VALUES (?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+            unavailable_until = VALUES(unavailable_until),
+            reason_code = VALUES(reason_code)
+    ");
+    if ($stmt) {
+        $stmt->bind_param('sss', $provider, $unavailableUntil, $reasonCode);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+function clearAIUnavailable($conn): void {
+    ensureAIServiceStatusTable($conn);
+    $provider = AI_PROVIDER;
+    $stmt = $conn->prepare("
+        UPDATE ai_service_status
+        SET unavailable_until = NULL, reason_code = NULL
+        WHERE provider = ?
+    ");
+    if ($stmt) {
+        $stmt->bind_param('s', $provider);
+        $stmt->execute();
+        $stmt->close();
+    }
+}
+
+/**
+ * Return one status shape used by both the status endpoint and message guard.
+ */
+function getAIAvailabilityStatus($conn, int $userId): array {
+    if (!isAIConfigured()) {
+        return [
+            'ai_available' => false,
+            'reason_code' => 'not_configured',
+            'retry_after' => 0,
+            'message' => 'AI chat is currently unavailable.',
+        ];
+    }
+
+    ensureAIServiceStatusTable($conn);
+    $provider = AI_PROVIDER;
+    $stmt = $conn->prepare("
+        SELECT UNIX_TIMESTAMP(unavailable_until) AS unavailable_until, reason_code
+        FROM ai_service_status
+        WHERE provider = ?
+    ");
+    if ($stmt) {
+        $stmt->bind_param('s', $provider);
+        $stmt->execute();
+        $serviceStatus = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        $until = (int) ($serviceStatus['unavailable_until'] ?? 0);
+        $reasonCode = $serviceStatus['reason_code'] ?? null;
+        if ($until > time()) {
+            $retryAfter = $until - time();
+            $reasonCode = $reasonCode ?: 'unavailable';
+            return [
+                'ai_available' => false,
+                'reason_code' => $reasonCode,
+                'retry_after' => $retryAfter,
+                'message' => $reasonCode === 'rate_limit'
+                    ? 'AI usage limit reached. Chat will unlock automatically when the limit refreshes.'
+                    : 'AI is temporarily unavailable. Chat will retry automatically.',
+            ];
+        }
+
+        // The provider-supplied retry window has elapsed. Do not send a probe:
+        // generation probes consume the same quota and can perpetuate a lock.
+        if ($until > 0 && $reasonCode) {
+            clearAIUnavailable($conn);
+        }
+    }
+
+    // User-specific application rate limit.
+    $windowStart = date('Y-m-d H:i:s', time() - AI_RATE_LIMIT_WINDOW);
+    $rateStmt = $conn->prepare("
+        SELECT COUNT(*) AS request_count, UNIX_TIMESTAMP(MIN(created_at)) AS oldest_request
+        FROM ai_chat_logs
+        WHERE user_id = ? AND created_at > ?
+    ");
+    if ($rateStmt) {
+        $rateStmt->bind_param('is', $userId, $windowStart);
+        $rateStmt->execute();
+        $rateData = $rateStmt->get_result()->fetch_assoc();
+        $rateStmt->close();
+        if ((int) ($rateData['request_count'] ?? 0) >= (int) AI_RATE_LIMIT_REQUESTS) {
+            $oldest = (int) ($rateData['oldest_request'] ?? time());
+            $retryAfter = max(1, AI_RATE_LIMIT_WINDOW - (time() - $oldest));
+            return [
+                'ai_available' => false,
+                'reason_code' => 'rate_limit',
+                'retry_after' => $retryAfter,
+                'message' => 'Your AI usage limit is refreshing. Chat will unlock automatically.',
+            ];
+        }
+    }
+
+    return [
+        'ai_available' => true,
+        'reason_code' => null,
+        'retry_after' => 0,
+        'message' => 'AI is available.',
+    ];
+}
 
 /**
  * Check if user has exceeded rate limit
@@ -658,17 +1057,22 @@ function buildAIPrompt($boardData, $userMessage, $conversationHistory, $userName
     $systemPrompt .= "\n\nCURRENT USER: " . $userName;
     $systemPrompt .= "\nCURRENT DATE: " . date('l, F j, Y');
     $systemPrompt .= "\nCURRENT TIME: " . date('g:i A');
+    $systemPrompt .= "\n\nFORMAT GUIDANCE FOR THIS QUESTION:\n"
+        . getQuestionFormatGuidance($userMessage);
     
     // Build conversation history for context
     $historyText = "";
     if (!empty($conversationHistory)) {
         $historyText = "\n\nPREVIOUS CONVERSATION (for context - understand follow-up questions based on this):\n";
-        // Only use last 6 messages for context to keep it focused
-        $recentHistory = array_slice($conversationHistory, -6);
+        // Include the latest turns in chronological order so references such as
+        // "those tasks" and "the second one" remain meaningful.
+        $recentHistory = array_slice($conversationHistory, -20);
         foreach ($recentHistory as $msg) {
             $role = $msg['role'] === 'user' ? 'User' : 'Assistant';
-            // Truncate long messages in history
-            $msgText = strlen($msg['message']) > 300 ? substr($msg['message'], 0, 300) . '...' : $msg['message'];
+            // Retain enough detail (including table rows) to resolve follow-ups.
+            $msgText = strlen($msg['message']) > 1200
+                ? substr($msg['message'], 0, 1200) . '...'
+                : $msg['message'];
             $historyText .= "$role: $msgText\n";
         }
     }
@@ -685,6 +1089,33 @@ IMPORTANT: If this question references something from the previous conversation 
         'system' => $systemPrompt,
         'user' => $contextPrompt
     ];
+}
+
+/**
+ * Give the model a query-specific presentation hint while leaving final
+ * judgment to it.
+ */
+function getQuestionFormatGuidance(string $question): string {
+    $question = strtolower(trim($question));
+
+    if (preg_match(
+        '/\b(description|describe it|who is assigned|assigned to|due date|priority|status|'
+        . 'what is (?:the )?name|when is|where is)\b/i',
+        $question
+    )) {
+        return '- This is a focused fact/description request. Use plain text in 1-3 sentences. Do not use a table.';
+    }
+
+    if (preg_match('/\b(names?|members?|assignees?)\b/i', $question)
+        && !preg_match('/\b(compare|breakdown|statistics?|details?)\b/i', $question)) {
+        return '- If several names are returned, use a short bullet list. Do not use a table unless comparison columns are needed.';
+    }
+
+    if (preg_match('/\b(all|pending|overdue|compare|summary|breakdown|statistics?|report)\b/i', $question)) {
+        return '- This may return multiple structured records. Use a table only if multiple rows and useful comparison columns are present.';
+    }
+
+    return '- Choose naturally between concise prose, bullets, or a table. Prefer prose unless structure materially improves clarity.';
 }
 
 // ============================================================
@@ -845,7 +1276,12 @@ function extractTextFromPDF($pdfData) {
  * Call Gemini AI API
  * @param array $filesData - Array of processed file data (can be empty, single, or multiple)
  */
-function callGeminiAPI($prompt, $filesData = []) {
+function callGeminiAPI(
+    $prompt,
+    $filesData = [],
+    ?int $maxOutputTokens = null,
+    int $timeoutSeconds = 30
+) {
     // Check if curl extension is available
     if (!function_exists('curl_init')) {
         error_log("cURL extension not available");
@@ -903,7 +1339,7 @@ function callGeminiAPI($prompt, $filesData = []) {
         ],
         'generationConfig' => [
             'temperature' => AI_TEMPERATURE,
-            'maxOutputTokens' => AI_MAX_TOKENS,
+            'maxOutputTokens' => $maxOutputTokens ?? AI_MAX_TOKENS,
             'topP' => 0.8,
             'topK' => 40
         ],
@@ -929,7 +1365,7 @@ function callGeminiAPI($prompt, $filesData = []) {
             'Content-Type: application/json'
         ],
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT => 30,
+        CURLOPT_TIMEOUT => max(3, $timeoutSeconds),
         CURLOPT_SSL_VERIFYPEER => false, // Disable SSL verification for localhost/Windows compatibility
         CURLOPT_SSL_VERIFYHOST => 0
     ]);
@@ -962,6 +1398,7 @@ function callGeminiAPI($prompt, $filesData = []) {
         error_log("Gemini API HTTP Error: " . $httpCode . " - " . $response);
         $errorData = json_decode($response, true);
         $errorMessage = 'AI service temporarily unavailable';
+        $retryAfter = null;
         
         if (isset($errorData['error']['message'])) {
             $apiError = $errorData['error']['message'];
@@ -975,6 +1412,9 @@ function callGeminiAPI($prompt, $filesData = []) {
                     foreach ($errorData['error']['details'] as $detail) {
                         if (isset($detail['retryDelay'])) {
                             $retryTime = ' Please try again in ' . $detail['retryDelay'] . '.';
+                            if (preg_match('/(\d+)/', (string) $detail['retryDelay'], $retryMatch)) {
+                                $retryAfter = (int) $retryMatch[1];
+                            }
                             break;
                         }
                     }
@@ -984,7 +1424,11 @@ function callGeminiAPI($prompt, $filesData = []) {
                 $errorMessage = 'AI service error. Please try again later.';
             }
         }
-        return ['success' => false, 'error' => $errorMessage];
+        return [
+            'success' => false,
+            'error' => $errorMessage,
+            'retry_after' => $retryAfter,
+        ];
     }
     
     $data = json_decode($response, true);
@@ -1008,9 +1452,19 @@ function callGeminiAPI($prompt, $filesData = []) {
  * Generate a fallback response based on the user's question and board data
  * This is used when the AI API is unavailable (e.g., on free hosting)
  */
-function generateFallbackResponse($userMessage, $boardData, $userName) {
+function generateFallbackResponse($userMessage, $boardData, $userName, $conversationHistory = []) {
     $message = strtolower(trim($userMessage));
     $boardName = $boardData['board_name'] ?? 'this board';
+
+    // In offline mode, carry the last user request into vague follow-ups.
+    if (preg_match('/\b(those|them|these|same|previous|above|ones)\b/i', $userMessage)) {
+        for ($i = count($conversationHistory) - 1; $i >= 0; $i--) {
+            if (($conversationHistory[$i]['role'] ?? '') === 'user') {
+                $message = strtolower($conversationHistory[$i]['message'] . ' ' . $userMessage);
+                break;
+            }
+        }
+    }
     
     // Extract data from boardData
     $lists = $boardData['lists'] ?? [];
@@ -1364,7 +1818,7 @@ function generateFallbackResponse($userMessage, $boardData, $userName) {
 /**
  * Format AI response and detect tables
  */
-function formatAIResponse($text) {
+function formatAIResponse($text, string $userMessage = '') {
     $hasTable = false;
     $tableHtml = null;
     $summaryText = '';
@@ -1377,6 +1831,16 @@ function formatAIResponse($text) {
         $result = extractTextAndTable($text);
         $summaryText = $result['text'];
         $tableHtml = $result['table_html'];
+
+        // Guard against redundant one-row tables for focused questions such as
+        // descriptions, assignees, dates, priorities, and statuses.
+        $formatHint = getQuestionFormatGuidance($userMessage);
+        if (($result['row_count'] ?? 0) <= 1
+            && strpos($formatHint, 'plain text') !== false
+            && trim($summaryText) !== '') {
+            $hasTable = false;
+            $tableHtml = null;
+        }
     } else {
         $summaryText = $text;
     }
@@ -1444,6 +1908,7 @@ function extractTextAndTable($text) {
     $inTable = false;
     $tableHtml = '';
     $outputText = '';
+    $dataRowCount = 0;
     
     foreach ($lines as $line) {
         $trimmedLine = trim($line);
@@ -1474,6 +1939,7 @@ function extractTextAndTable($text) {
                     $tableHtml .= '<td>' . htmlspecialchars($cell) . '</td>';
                 }
                 $tableHtml .= '</tr>';
+                $dataRowCount++;
             }
         } else {
             // Not a table row - this is regular text
@@ -1494,6 +1960,7 @@ function extractTextAndTable($text) {
     
     return [
         'text' => trim($outputText),
-        'table_html' => $tableHtml
+        'table_html' => $tableHtml,
+        'row_count' => $dataRowCount,
     ];
 }
