@@ -1226,6 +1226,10 @@ function createList(e) {
 // overwrite that implementation. Only register a fallback when no page-level version exists.
 if (typeof window.deleteList !== 'function') {
     window.deleteList = async function deleteList(listId) {
+        if (!window.boardCanManage) {
+            showToast('Only Admins can delete lists', 'error');
+            return;
+        }
         const numericListId = Number.parseInt(listId, 10);
         if (!Number.isInteger(numericListId) || numericListId <= 0) {
             showToast('Invalid list. Please refresh the page and try again.', 'error');
@@ -1536,6 +1540,10 @@ function createOptimisticCard(tempId, title, listId) {
 
 // Show edit card modal
 function showEditCardModal(cardId) {
+    if (!window.boardCanManage) {
+        showToast('Only Admins can edit task titles or descriptions', 'error');
+        return;
+    }
     if (window.DEBUG_MODE) console.log('showEditCardModal called with cardId:', cardId);
     
     // First, fetch the card details
@@ -1669,6 +1677,10 @@ function showEditCardModal(cardId) {
 // Update card
 function updateCard(e, cardId) {
     e.preventDefault();
+    if (!window.boardCanManage) {
+        showToast('Only Admins can edit task titles or descriptions', 'error');
+        return;
+    }
     
     const form = e.target;
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -1711,6 +1723,10 @@ function updateCard(e, cardId) {
 
 // Delete card
 window.deleteCard = async function deleteCard(cardId) {
+    if (!window.boardCanManage) {
+        showToast('Only Admins can delete tasks', 'error');
+        return;
+    }
     const numericCardId = Number.parseInt(cardId, 10);
     if (!Number.isInteger(numericCardId) || numericCardId <= 0) {
         showToast('Invalid task. Please refresh the page and try again.', 'error');

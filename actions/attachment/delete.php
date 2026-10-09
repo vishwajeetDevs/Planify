@@ -47,6 +47,15 @@ try {
     $stmt->bind_param('i', $attachmentId);
     
     if ($stmt->execute()) {
+        $removedName = $attachment['original_name'] ?? 'an attachment';
+        logActivity(
+            $conn,
+            (int) $attachment['board_id'],
+            (int) $_SESSION['user_id'],
+            'attachment_deleted',
+            'removed "' . $removedName . '"',
+            (int) $attachment['card_id']
+        );
         echo json_encode(['success' => true, 'message' => 'Attachment deleted']);
     } else {
         throw new Exception('Failed to delete attachment');

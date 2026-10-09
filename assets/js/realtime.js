@@ -365,6 +365,19 @@
 
         const onThisBoard = window.currentBoardId && sameId(event.board_id, window.currentBoardId);
 
+        if (onThisBoard && event.entity_type === 'activity') {
+            clearTimeout(window.__planifyActivityTimer);
+            window.__planifyActivityTimer = setTimeout(function () {
+                if (typeof window.refreshBoardActivity === 'function') {
+                    window.refreshBoardActivity();
+                }
+                if (window.currentCardId && typeof window.loadActivity === 'function') {
+                    window.loadActivity(window.currentCardId);
+                }
+            }, 120);
+            return;
+        }
+
         if (onThisBoard && event.entity_type === 'board' && event.action === 'deleted') {
             notify(event, 'This board was deleted.', 'error');
             window.location.href = base() + '/public/dashboard.php';

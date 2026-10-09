@@ -1,3 +1,11 @@
+<?php
+$cardModalCanManage = !empty($canManage);
+?>
+<script>
+if (typeof window.boardCanManage === 'undefined') {
+    window.boardCanManage = <?php echo $cardModalCanManage ? 'true' : 'false'; ?>;
+}
+</script>
 <!-- Card Details Modal - Trello-style Layout -->
 <div id="cardModal" class="fixed inset-0 bg-black/60 dark:bg-black/80 z-[250] flex items-center justify-center p-2 sm:p-3 overflow-y-auto hidden transition-all duration-300 opacity-0">
     <div class="card-modal-shell bg-gray-100 dark:bg-gray-900 rounded-xl w-full relative shadow-2xl transform transition-all duration-300 ease-out opacity-0 translate-y-4 scale-95 my-auto overflow-hidden" 
@@ -47,7 +55,7 @@
                     </div>
                 </div>
                 
-                <?php if (!empty($canEdit)): ?>
+                <?php if ($cardModalCanManage): ?>
                 <button
                     type="button"
                     onclick="event.stopPropagation(); window.deleteCard(window.currentCardId)"
@@ -155,7 +163,8 @@
                         </div>
                     </div>
                     
-                    <!-- Members Button -->
+                    <?php if ($cardModalCanManage): ?>
+                    <!-- Members Button (Admin / Super Admin only) -->
                     <div class="relative">
                         <button onclick="toggleMembersPopup()" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">
                         <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
@@ -174,6 +183,7 @@
                             </div>
                         </div>
                     </div>
+                    <?php endif; ?>
                     
                     <!-- Attachment Button -->
                     <div class="relative">
@@ -247,9 +257,11 @@
                             <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"/></svg>
                             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">Description</span>
                         </div>
+                        <?php if ($cardModalCanManage): ?>
                         <button id="editDescriptionBtn" onclick="editDescription()" class="text-xs text-gray-500 hover:text-primary dark:text-gray-400 dark:hover:text-primary transition-colors">
                             Edit
                         </button>
+                        <?php endif; ?>
                     </div>
                     <div id="cardDescription" class="text-sm text-gray-700 dark:text-gray-300 leading-relaxed pl-6 prose prose-sm dark:prose-invert max-w-none p-3 border-2 border-gray-200 dark:border-gray-600 rounded-lg bg-gray-50/50 dark:bg-gray-800/50">
                         <!-- Description content -->
@@ -1563,6 +1575,10 @@ function formatText(inputId, format) {
 }
 
 window.editDescription = function() {
+    if (!window.boardCanManage) {
+        if (window.showToast) window.showToast('Only Admins can edit task descriptions', 'error');
+        return;
+    }
     const desc = document.getElementById('cardDescription');
     const editor = document.getElementById('descriptionEditor');
     const input = document.getElementById('descriptionInput');
@@ -1601,6 +1617,10 @@ window.cancelEditDescription = function() {
 };
 
 window.saveDescription = function() {
+    if (!window.boardCanManage) {
+        if (window.showToast) window.showToast('Only Admins can edit task descriptions', 'error');
+        return;
+    }
     const cardId = window.currentCardId;
     const input = document.getElementById('descriptionInput');
     const newDesc = input?.value.trim() || '';
@@ -3239,6 +3259,7 @@ window.planifyConfirm = function({ title = 'Are you sure?', message = '', confir
 // MEMBERS FUNCTIONALITY
 // =====================================================
 window.toggleMembersPopup = function() {
+    if (!window.boardCanManage) return;
     const popup = document.getElementById('membersPopup');
     const wasHidden = popup.classList.contains('hidden');
     document.querySelectorAll('.action-popup').forEach(p => p.classList.add('hidden'));
@@ -3283,6 +3304,10 @@ window.loadMembers = function() {
 };
 
 window.toggleMember = function(userId) {
+    if (!window.boardCanManage) {
+        if (window.showToast) window.showToast('Only Admins can assign members to tasks', 'error');
+        return;
+    }
     if (!window.currentCardId || window.memberAssigning) return;
     const row = document.querySelector('#membersList [data-member-id="' + userId + '"]');
     const check = row ? row.querySelector('.member-check') : null;

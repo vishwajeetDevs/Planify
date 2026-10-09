@@ -87,12 +87,7 @@ try {
         $board_id = $card_result['board_id'];
         $card_id = $card_result['card_id'];
         
-        // Log activity - use correct column names: board_id, action (not type)
-        $activity_desc = 'updated a comment';
-        $activity_action = 'comment';
-        $activity_stmt = $conn->prepare("INSERT INTO activities (board_id, user_id, card_id, action, description) VALUES (?, ?, ?, ?, ?)");
-        $activity_stmt->bind_param('iiiss', $board_id, $_SESSION['user_id'], $card_id, $activity_action, $activity_desc);
-        $activity_stmt->execute();
+        logActivity($conn, (int) $board_id, (int) $_SESSION['user_id'], 'comment', 'updated a comment', (int) $card_id);
         
         // Get the updated comment with user info for the response
         $comment_stmt = $conn->prepare("

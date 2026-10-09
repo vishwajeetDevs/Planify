@@ -112,12 +112,13 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
             foreach ($boards as $board): 
                 $delay = 0.2 + ($index * 0.05);
                 $index++;
+                $boardCanManage = in_array($board['user_role'] ?? '', ['owner', 'admin'], true);
             ?>
             <div class="group relative animate-fade-in-up" style="animation-delay: <?php echo $delay; ?>s;"
                  x-data="{ showMenu: false, boardId: <?php echo $board['id']; ?> }">
                 <div class="board-tile backdrop-blur-lg rounded-lg transition-all duration-300 p-5 h-40 flex flex-col hover:shadow-xl hover:-translate-y-1 overflow-hidden"
                      style="--board-accent: <?php echo e($board['background_color'] ?? '#171717'); ?>;">
-                    <!-- Three-dot menu button -->
+                    <?php if ($boardCanManage): ?>
                     <div class="absolute top-3 right-3 z-10 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
                         <button 
                             @click.stop="showMenu = !showMenu"
@@ -126,7 +127,6 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                             title="Board options">
                             <i class="fas fa-ellipsis-h w-4 h-4"></i>
                         </button>
-                        <!-- Dropdown menu -->
                         <div 
                             x-show="showMenu"
                             x-cloak
@@ -157,6 +157,7 @@ $boards = getUserAccessibleBoardsInWorkspace($conn, $_SESSION['user_id'], $works
                             </button>
                         </div>
                     </div>
+                    <?php endif; ?>
                     
                     <a href="<?php echo encryptedUrl('board.php', $board['id']); ?>" class="flex-1 flex flex-col">
                         <div class="flex-1">

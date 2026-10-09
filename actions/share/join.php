@@ -64,25 +64,14 @@ try {
         jsonResponse(['success' => false, 'message' => 'Invalid share link'], 404);
     }
     
-    // Validate link status
-    if ($shareLink['is_revoked']) {
+    $linkState = validateShareLinkState($shareLink);
+    if (!$linkState['ok']) {
         $conn->rollback();
-        jsonResponse(['success' => false, 'message' => 'This link has been revoked'], 410);
-    }
-    
-    if ($shareLink['expires_at'] && strtotime($shareLink['expires_at']) < time()) {
-        $conn->rollback();
-        jsonResponse(['success' => false, 'message' => 'This link has expired'], 410);
-    }
-    
-    if ($shareLink['max_uses'] && $shareLink['uses'] >= $shareLink['max_uses']) {
-        $conn->rollback();
-        jsonResponse(['success' => false, 'message' => 'This link has reached its maximum uses'], 410);
-    }
-    
-    if ($shareLink['single_use'] && $shareLink['uses'] > 0) {
-        $conn->rollback();
-        jsonResponse(['success' => false, 'message' => 'This link has already been used'], 410);
+        jsonResponse([
+            'success' => false,
+            'message' => $linkState['message'],
+            'error_code' => $linkState['error_code'] ?? 'INVALID',
+        ], 410);
     }
     
     // Check if user is already a member
@@ -105,19 +94,17 @@ try {
         ]);
     }
     
-    // Check domain restriction
     if ($shareLink['restrict_domain']) {
         $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
         $stmt->bind_param("i", $userId);
         $stmt->execute();
         $user = $stmt->get_result()->fetch_assoc();
-        
-        $userDomain = '@' . substr(strrchr($user['email'], '@'), 1);
-        if (strtolower($userDomain) !== strtolower($shareLink['restrict_domain'])) {
+
+        if (!$user || !userEmailMatchesShareDomain($user['email'], $shareLink['restrict_domain'])) {
             $conn->rollback();
             jsonResponse([
                 'success' => false,
-                'message' => 'This link is restricted to ' . $shareLink['restrict_domain'] . ' email addresses'
+                'message' => 'This link is restricted to ' . $shareLink['restrict_domain'] . ' email addresses',
             ], 403);
         }
     }
@@ -143,6 +130,10 @@ try {
             VALUES (?, ?, ?, ?, 'requested')
         ");
         $stmt->bind_param("iiss", $shareLink['id'], $userId, $ipAddress, $userAgent);
+        $stmt->execute();
+
+        $stmt = $conn->prepare("UPDATE share_links SET uses = uses + 1 WHERE id = ?");
+        $stmt->bind_param("i", $shareLink['id']);
         $stmt->execute();
         
         // Create notification for owner

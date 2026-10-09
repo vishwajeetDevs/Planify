@@ -64,6 +64,14 @@ try {
     
     if ($stmt->execute()) {
         $insertId = $conn->insert_id;
+        logActivity(
+            $conn,
+            (int) $card['board_id'],
+            (int) $_SESSION['user_id'],
+            'link_added',
+            'added a link "' . $name . '"',
+            (int) $cardId
+        );
         $emailCardId = $cardId;
         $emailUserId = $_SESSION['user_id'];
         $emailName = $name;

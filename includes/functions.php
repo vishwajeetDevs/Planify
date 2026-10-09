@@ -186,6 +186,229 @@ function canManageBoard($conn, $userId, $boardId) {
     return $access && in_array($access['role'], ['owner', 'admin'], true);
 }
 
+function shareLinkExpiredMessage() {
+    return 'This link has expired. Please ask the Admin or Super Admin to share a new link.';
+}
+
+/**
+ * Normalize domain to @company.com or return null if invalid.
+ */
+function normalizeShareLinkDomain($domain) {
+    $domain = trim((string) $domain);
+    if ($domain === '') {
+        return '';
+    }
+    $domain = ltrim($domain, '@');
+    if (!preg_match('/^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/', $domain)) {
+        return null;
+    }
+    return '@' . strtolower($domain);
+}
+
+function userEmailMatchesShareDomain($email, $restrictDomain) {
+    if ($restrictDomain === '' || $restrictDomain === null) {
+        return true;
+    }
+    $email = strtolower(trim((string) $email));
+    $restrictDomain = strtolower(trim((string) $restrictDomain));
+    if ($restrictDomain !== '' && $restrictDomain[0] !== '@') {
+        $restrictDomain = '@' . $restrictDomain;
+    }
+    $atPos = strrpos($email, '@');
+    if ($atPos === false) {
+        return false;
+    }
+    return ('@' . substr($email, $atPos + 1)) === $restrictDomain;
+}
+
+/**
+ * Validate share link row (revoked, expiry, usage limits).
+ *
+ * @return array{ok: bool, error_code?: string, message?: string}
+ */
+function validateShareLinkState(array $shareLink) {
+    if (!empty($shareLink['is_revoked'])) {
+        return [
+            'ok' => false,
+            'error_code' => 'REVOKED',
+            'message' => 'This link has been revoked',
+        ];
+    }
+    if (!empty($shareLink['expires_at']) && strtotime($shareLink['expires_at']) < time()) {
+        return [
+            'ok' => false,
+            'error_code' => 'EXPIRED',
+            'message' => shareLinkExpiredMessage(),
+        ];
+    }
+    $maxUses = (int) ($shareLink['max_uses'] ?? 0);
+    $uses = (int) ($shareLink['uses'] ?? 0);
+    if ($maxUses > 0 && $uses >= $maxUses) {
+        return [
+            'ok' => false,
+            'error_code' => 'MAX_USES_REACHED',
+            'message' => 'This link has reached its maximum number of uses',
+        ];
+    }
+    if (!empty($shareLink['single_use']) && $uses > 0) {
+        return [
+            'ok' => false,
+            'error_code' => 'ALREADY_USED',
+            'message' => 'This link has already been used',
+        ];
+    }
+    return ['ok' => true];
+}
+
+/**
+ * @return array{ok: bool, expires_at?: ?string, message?: string}
+ */
+function computeShareLinkExpiresAt($expiresIn) {
+    if ($expiresIn === '' || $expiresIn === null) {
+        $expiresIn = '1day';
+    }
+    if ($expiresIn === 'never') {
+        return ['ok' => true, 'expires_at' => null];
+    }
+    switch ($expiresIn) {
+        case '1day':
+            return ['ok' => true, 'expires_at' => date('Y-m-d H:i:s', strtotime('+24 hours'))];
+        case '7days':
+            return ['ok' => true, 'expires_at' => date('Y-m-d H:i:s', strtotime('+7 days'))];
+        case '30days':
+            return ['ok' => true, 'expires_at' => date('Y-m-d H:i:s', strtotime('+30 days'))];
+        default:
+            $timestamp = strtotime($expiresIn);
+            if (!$timestamp || $timestamp <= time()) {
+                return ['ok' => false, 'message' => 'Invalid or past expiration time'];
+            }
+            return ['ok' => true, 'expires_at' => date('Y-m-d H:i:s', $timestamp)];
+    }
+}
+
+/**
+ * @return array{ok: bool, emails?: string[], message?: string}
+ */
+function parseShareInviteEmails($raw, $maxRecipients = 25) {
+    $parts = preg_split('/[\s,;]+/', trim((string) $raw), -1, PREG_SPLIT_NO_EMPTY);
+    $unique = [];
+    foreach ($parts as $part) {
+        $email = strtolower(trim($part));
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return ['ok' => false, 'message' => 'Invalid email address: ' . $part];
+        }
+        $unique[$email] = $email;
+    }
+    if ($unique === []) {
+        return ['ok' => false, 'message' => 'Enter at least one email address'];
+    }
+    if (count($unique) > $maxRecipients) {
+        return ['ok' => false, 'message' => 'You can invite up to ' . $maxRecipients . ' people at once'];
+    }
+    return ['ok' => true, 'emails' => array_values($unique)];
+}
+
+function userCanShareBoard($conn, $userId, $boardId) {
+    $stmt = $conn->prepare("SELECT role FROM board_members WHERE board_id = ? AND user_id = ?");
+    $stmt->bind_param('ii', $boardId, $userId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+    return $row && in_array($row['role'], ['owner', 'admin'], true);
+}
+
+/**
+ * Emails of users who already belong to the board or its workspace (for share invites).
+ *
+ * @return array{board: string[], workspace: string[]}
+ */
+function getShareInviteExistingEmails($conn, $boardId) {
+    $stmt = $conn->prepare('SELECT workspace_id FROM boards WHERE id = ?');
+    $stmt->bind_param('i', $boardId);
+    $stmt->execute();
+    $row = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$row) {
+        return ['board' => [], 'workspace' => []];
+    }
+
+    $workspaceId = (int) $row['workspace_id'];
+    $boardEmails = [];
+    $workspaceEmails = [];
+
+    $stmt = $conn->prepare('
+        SELECT LOWER(TRIM(u.email)) AS email
+        FROM board_members bm
+        INNER JOIN users u ON u.id = bm.user_id
+        WHERE bm.board_id = ?
+    ');
+    $stmt->bind_param('i', $boardId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($emailRow = $result->fetch_assoc()) {
+        if (!empty($emailRow['email'])) {
+            $boardEmails[] = $emailRow['email'];
+        }
+    }
+    $stmt->close();
+
+    $stmt = $conn->prepare('
+        SELECT LOWER(TRIM(u.email)) AS email
+        FROM workspace_members wm
+        INNER JOIN users u ON u.id = wm.user_id
+        WHERE wm.workspace_id = ?
+    ');
+    $stmt->bind_param('i', $workspaceId);
+    $stmt->execute();
+    $result = $stmt->get_result();
+    while ($emailRow = $result->fetch_assoc()) {
+        if (!empty($emailRow['email'])) {
+            $workspaceEmails[] = $emailRow['email'];
+        }
+    }
+    $stmt->close();
+
+    return [
+        'board' => array_values(array_unique($boardEmails)),
+        'workspace' => array_values(array_unique($workspaceEmails)),
+    ];
+}
+
+/**
+ * @return array{ok: bool, emails?: string[], skipped?: string[], message?: string}
+ */
+function filterShareInviteRecipients($conn, $boardId, array $recipientEmails) {
+    $existing = getShareInviteExistingEmails($conn, $boardId);
+    $boardSet = array_flip($existing['board']);
+    $allowed = [];
+    $skipped = [];
+
+    foreach ($recipientEmails as $email) {
+        $normalized = strtolower(trim($email));
+        // Workspace members who are not on this board can still be invited.
+        if (isset($boardSet[$normalized])) {
+            $skipped[] = $normalized;
+            continue;
+        }
+        $allowed[] = $normalized;
+    }
+
+    if ($allowed === [] && $skipped !== []) {
+        return [
+            'ok' => false,
+            'message' => 'All entered addresses are already members of this board',
+            'skipped' => $skipped,
+        ];
+    }
+
+    if ($allowed === []) {
+        return ['ok' => false, 'message' => 'Enter at least one email address'];
+    }
+
+    return ['ok' => true, 'emails' => $allowed, 'skipped' => $skipped];
+}
+
 // Check if user is board owner
 function isBoardOwner($conn, $userId, $boardId) {
     $access = hasAccessToBoard($conn, $userId, $boardId);
@@ -315,10 +538,69 @@ function logActivity($conn, $boardId, $userId, $action, $description, $cardId = 
     
     if (!$result) {
         error_log("logActivity execute failed: " . $stmt->error);
+        $stmt->close();
+        return false;
     }
-    
+
+    $activityId = (int) $conn->insert_id;
     $stmt->close();
-    return $result;
+
+    publishActivityEvent($conn, (int) $boardId, (int) $userId, $cardId === null ? null : (int) $cardId, $activityId, (string) $description);
+
+    return true;
+}
+
+/**
+ * Push one live-sync event so open boards refresh their activity list.
+ * A missing realtime table must not fail the activity insert itself.
+ */
+function publishActivityEvent($conn, $boardId, $userId, $cardId, $activityId, $description) {
+    if ($activityId <= 0 || $boardId <= 0) {
+        return;
+    }
+
+    try {
+        $workspaceId = null;
+        $ws = $conn->prepare('SELECT workspace_id FROM boards WHERE id = ?');
+        if ($ws) {
+            $ws->bind_param('i', $boardId);
+            $ws->execute();
+            $row = $ws->get_result()->fetch_assoc();
+            $ws->close();
+            if ($row && isset($row['workspace_id'])) {
+                $workspaceId = (int) $row['workspace_id'];
+            }
+        }
+
+        $summary = function_exists('mb_substr') ? mb_substr($description, 0, 250) : substr($description, 0, 250);
+
+        if ($cardId === null) {
+            $stmt = $conn->prepare("
+                INSERT INTO realtime_events (board_id, workspace_id, card_id, actor_id, entity_type, entity_id, action, summary)
+                VALUES (?, ?, NULL, ?, 'activity', ?, 'created', ?)
+            ");
+            if (!$stmt) {
+                return;
+            }
+            $workspaceParam = $workspaceId === null ? 0 : (int) $workspaceId;
+            $stmt->bind_param('iiiis', $boardId, $workspaceParam, $userId, $activityId, $summary);
+        } else {
+            $stmt = $conn->prepare("
+                INSERT INTO realtime_events (board_id, workspace_id, card_id, actor_id, entity_type, entity_id, action, summary)
+                VALUES (?, ?, ?, ?, 'activity', ?, 'created', ?)
+            ");
+            if (!$stmt) {
+                return;
+            }
+            $workspaceParam = $workspaceId === null ? 0 : (int) $workspaceId;
+            $stmt->bind_param('iiiiis', $boardId, $workspaceParam, $cardId, $userId, $activityId, $summary);
+        }
+
+        $stmt->execute();
+        $stmt->close();
+    } catch (Throwable $e) {
+        error_log('publishActivityEvent failed: ' . $e->getMessage());
+    }
 }
 
 // Upload file
@@ -358,6 +640,46 @@ function jsonResponse($data, $statusCode = 200) {
     header('Content-Type: application/json');
     echo json_encode($data);
     exit;
+}
+
+/**
+ * Send a JSON response to the client immediately but keep the PHP process
+ * alive so slow work (e.g. SMTP) can continue after the browser has its answer.
+ * Caller must still `exit` when the background work is done.
+ */
+function jsonResponseAndContinue($data, $statusCode = 200) {
+    ignore_user_abort(true);
+    @set_time_limit(120);
+
+    // Release the session lock so other requests from this user aren't blocked.
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_write_close();
+    }
+
+    $json = json_encode($data);
+
+    // Discard any stray buffered output, then emit exactly one payload.
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    if (function_exists('apache_setenv')) {
+        @apache_setenv('no-gzip', '1');
+    }
+    @ini_set('zlib.output_compression', '0');
+
+    http_response_code($statusCode);
+    header('Content-Type: application/json');
+    header('Content-Length: ' . strlen($json));
+    header('Connection: close');
+    header('X-Accel-Buffering: no');
+
+    echo $json;
+    flush();
+
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    }
 }
 
 // Get priority badge color

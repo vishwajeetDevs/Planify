@@ -31,9 +31,8 @@ if ($boardId <= 0) {
 }
 
 try {
-    // Check if user has permission to edit this board
-    if (!canEditBoard($conn, $userId, $boardId)) {
-        jsonResponse(['success' => false, 'message' => 'You do not have permission to edit this board'], 403);
+    if (!canManageBoard($conn, $userId, $boardId)) {
+        jsonResponse(['success' => false, 'message' => 'Only an Admin or Super Admin can edit board name or description'], 403);
     }
 
     // Update board

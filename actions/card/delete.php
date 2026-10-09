@@ -90,8 +90,8 @@ try {
     $taskTitle = $boardData['title'] ?? 'Task';
     $boardName = $boardData['board_name'] ?? '';
 
-    if (!canEditBoard($conn, $userId, $boardId)) {
-        throw new Exception('Permission denied');
+    if (!canManageBoard($conn, $userId, $boardId)) {
+        throw new Exception('Only Admins can delete tasks');
     }
     
     // Get assignees before deleting for email notification
@@ -149,11 +149,7 @@ try {
     // Finally, delete the card
     executeStatement($conn, "DELETE FROM cards WHERE id = ?", [$cardId], 'i');
     
-    // Log activity
-    $activityDesc = "deleted a card";
-    executeStatement($conn, 
-        "INSERT INTO activities (user_id, board_id, action, description) VALUES (?, ?, 'delete_card', ?)",
-        [$userId, $boardId, $activityDesc], 'iis');
+    logActivity($conn, (int) $boardId, (int) $userId, 'delete_card', 'deleted the task "' . $taskTitle . '"');
     
     $conn->commit();
     

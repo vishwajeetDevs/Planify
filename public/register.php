@@ -196,6 +196,7 @@ unset($_SESSION['error']);
                             name="email" 
                             required 
                             autocomplete="email"
+                            value="<?php echo htmlspecialchars(trim((string) ($_GET['email'] ?? '')), ENT_QUOTES, 'UTF-8'); ?>"
                             class="input-focus w-full px-4 py-3.5 pl-11 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent bg-gray-50/50 hover:bg-white"
                             placeholder="Enter your email"
                         >

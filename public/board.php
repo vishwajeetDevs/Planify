@@ -210,6 +210,8 @@ html.board-viewport-lock body {
 <script>document.documentElement.classList.add('board-viewport-lock');</script>
 <?php
 $canEdit = in_array($userAccess['role'], ['owner', 'admin', 'member'], true);
+$canManage = canManageBoard($conn, $_SESSION['user_id'], $boardId);
+$canLeaveBoard = ($userAccess['role'] === 'admin');
 
 // Get lists with cards count and created_at
 $stmt = $conn->prepare("
@@ -359,8 +361,8 @@ $stmt = $conn->prepare("
     FROM activities a
     INNER JOIN users u ON a.user_id = u.id
     WHERE a.board_id = ?
-    ORDER BY a.created_at DESC
-    LIMIT 20
+    ORDER BY a.id DESC
+    LIMIT 25
 ");
 $stmt->bind_param("i", $boardId);
 $stmt->execute();
@@ -411,6 +413,8 @@ foreach ($boardMembers as $member) {
         $otherMembers[] = $member;
     }
 }
+
+$boardListUrl = encryptedUrl('workspace.php', (int) $board['workspace_id']);
 ?>
 
 <div class="board-shell board-shell-viewport bg-slate-50/80 dark:bg-gray-900/95 max-w-full min-w-0 overflow-hidden flex flex-col">
@@ -419,8 +423,16 @@ foreach ($boardMembers as $member) {
         <div class="mb-3 shrink-0">
             <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 min-w-0">
                 <div class="flex items-center gap-4 min-w-0">
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <h1 id="boardTitle" class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white truncate">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <a
+                            href="<?php echo e($boardListUrl); ?>"
+                            class="flex-shrink-0 inline-flex items-center justify-center w-8 h-8 -ml-1 rounded-lg text-gray-600 dark:text-gray-300 hover:text-primary dark:hover:text-white hover:bg-gray-200/80 dark:hover:bg-gray-700/80 transition-colors"
+                            title="Back to boards in <?php echo e($board['workspace_name']); ?>"
+                            aria-label="Back to board list"
+                        >
+                            <i class="fas fa-chevron-left text-sm" aria-hidden="true"></i>
+                        </a>
+                        <h1 id="boardTitle" class="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white truncate min-w-0">
                             <?php echo e($board['name']); ?>
                         </h1>
                         <span class="board-role-badge inline-flex items-center px-2 py-0.5 text-[11px] font-semibold rounded-full bg-primary/10 text-primary dark:bg-primary/20 dark:text-primary-light whitespace-nowrap">
@@ -569,6 +581,7 @@ foreach ($boardMembers as $member) {
                                     >
                                         <i class="fas fa-tasks mr-2"></i> Add task
                                     </a>
+                                    <?php if ($canManage): ?>
                                     <a 
                                         href="#" 
                                         class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -576,6 +589,7 @@ foreach ($boardMembers as $member) {
                                     >
                                         <i class="far fa-edit mr-2"></i> Edit list
                                     </a>
+                                    <?php endif; ?>
                                     <a 
                                         href="#" 
                                         class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -590,6 +604,7 @@ foreach ($boardMembers as $member) {
                                     >
                                         <i class="fas fa-info-circle mr-2"></i> Details
                                     </a>
+                                    <?php if ($canManage): ?>
                                     <a 
                                         href="#" 
                                         class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-gray-700"
@@ -597,6 +612,7 @@ foreach ($boardMembers as $member) {
                                     >
                                         <i class="far fa-trash-alt mr-2"></i> Delete list
                                     </a>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php endif; ?>
@@ -908,11 +924,11 @@ foreach ($boardMembers as $member) {
                                             </div>
                                         </div>
 
-                                        <?php if ($canEdit): ?>
+                                        <?php if ($canManage): ?>
                                             <div class="absolute top-1.5 right-1.5 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 card-action-btn">
                                                 <button 
                                                     type="button"
-                                                    class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 hover:bg-white dark:hover:bg-gray-700 shadow-sm hover:shadow-md rounded text-gray-600 hover:text-primary dark:text-gray-300 dark:hover:text-primary transition-all duration-200"
+                                                    class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 hover:bg-white dark:bg-gray-700 shadow-sm hover:shadow-md rounded text-gray-600 hover:text-primary dark:text-gray-300 dark:hover:text-primary transition-all duration-200"
                                                     onclick="event.stopPropagation(); showEditCardModal(<?php echo $card['id']; ?>);"
                                                     title="Edit task">
                                                     <i class="fas fa-pen text-[10px]"></i>
@@ -1143,18 +1159,22 @@ foreach ($boardMembers as $member) {
         <!-- Modal Footer -->
         <div class="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50">
             <div class="flex items-center justify-between gap-4">
-                <?php if (!$isOwner): ?>
-                <!-- Leave Board button for non-owners -->
+                <?php if ($canLeaveBoard): ?>
                 <button 
                     onclick="showLeaveBoardConfirm()"
                     class="px-4 py-2 text-sm font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                 >
                     <i class="fas fa-sign-out-alt mr-2"></i>Leave Board
                 </button>
-                <?php else: ?>
+                <?php elseif ($isOwner): ?>
                 <p class="text-xs text-gray-500 dark:text-gray-400">
                     <i class="fas fa-info-circle mr-1"></i>
                     As Super Admin, transfer that role before leaving.
+                </p>
+                <?php else: ?>
+                <p class="text-xs text-gray-500 dark:text-gray-400">
+                    <i class="fas fa-info-circle mr-1"></i>
+                    Ask an Admin if you need to be removed from this board.
                 </p>
                 <?php endif; ?>
                 <button 
@@ -1310,10 +1330,10 @@ foreach ($boardMembers as $member) {
                 <i class="fas fa-times"></i>
             </button>
         </div>
-        <div class="p-4 space-y-3 max-h-[70vh] overflow-y-auto bg-gray-50/60 dark:bg-gray-900/60">
+        <div id="boardActivityFeed" class="p-4 space-y-3 max-h-[70vh] overflow-y-auto bg-gray-50/60 dark:bg-gray-900/60">
             <?php if (!empty($activities)): ?>
                 <?php foreach ($activities as $activity): ?>
-                    <div class="flex gap-3 items-start bg-white dark:bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-800 shadow-sm">
+                    <div class="flex gap-3 items-start bg-white dark:bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-800 shadow-sm" data-activity-id="<?php echo (int) $activity['id']; ?>">
                         <div class="h-8 w-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm">
                             <?php echo strtoupper(substr($activity['user_name'] ?? 'S', 0, 1)); ?>
                         </div>
@@ -1399,10 +1419,12 @@ foreach ($boardMembers as $member) {
     </div>
 </div>
 
-<?php if ($canShare): ?>
+<?php if ($canShare):
+    $shareModalTabWidth = $canReviewRequests ? 'w-1/3' : 'w-1/2';
+?>
 <!-- Share Board Modal -->
-<div id="shareModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-50 flex items-center justify-center p-4 hidden" x-data="shareModalData()">
-    <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-lg shadow-xl overflow-hidden" @click.away="closeShareModal()">
+<div id="shareModal" class="fixed inset-0 bg-black/50 dark:bg-black/70 z-[300] flex items-start sm:items-center justify-center p-4 sm:p-6 overflow-y-auto hidden" x-data="shareModalData()" x-init="init()">
+    <div class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-xl shadow-xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)] my-auto" @click.away="closeShareModal()">
         <!-- Header -->
         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
             <div class="flex items-center justify-between">
@@ -1417,26 +1439,29 @@ foreach ($boardMembers as $member) {
         </div>
         
         <!-- Content -->
-        <div class="p-6">
+        <div class="p-6 overflow-y-auto flex-1 min-h-0 overscroll-contain">
             <!-- View Tabs -->
-            <div class="flex border-b border-gray-200 dark:border-gray-700 mb-6">
+            <div class="flex w-full border-b border-gray-200 dark:border-gray-700 mb-6">
                 <button 
+                    type="button"
                     @click="activeTab = 'create'"
                     :class="activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-                    class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+                    class="<?php echo e($shareModalTabWidth); ?> px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors text-center truncate">
                     Create Link
                 </button>
                 <button 
-                    @click="activeTab = 'manage'; loadExistingLinks()"
-                    :class="activeTab === 'manage' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-                    class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
-                    Manage Links
+                    type="button"
+                    @click="activeTab = 'email'"
+                    :class="activeTab === 'email' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+                    class="<?php echo e($shareModalTabWidth); ?> px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors text-center truncate">
+                    Share Link
                 </button>
                 <?php if ($canReviewRequests): ?>
                 <button 
+                    type="button"
                     @click="activeTab = 'requests'; loadJoinRequests()"
                     :class="activeTab === 'requests' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-                    class="px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors">
+                    class="<?php echo e($shareModalTabWidth); ?> px-2 sm:px-4 py-2.5 text-xs sm:text-sm font-medium border-b-2 -mb-px transition-colors text-center truncate">
                     Request Access
                     <span x-show="pendingRequests > 0" x-text="pendingRequests" class="ml-1 px-1.5 py-0.5 text-xs bg-red-500 text-white rounded-full"></span>
                 </button>
@@ -1476,21 +1501,21 @@ foreach ($boardMembers as $member) {
                     <!-- Access Type -->
                     <div class="mb-5">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Access Type</label>
-                        <div class="space-y-2">
-                            <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
-                                   :class="accessType === 'join_on_click' && 'border-primary bg-primary/5'">
-                                <input type="radio" x-model="accessType" value="join_on_click" class="mt-0.5 text-primary focus:ring-primary">
-                                <div class="ml-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition h-full"
+                                   :class="accessType === 'join_on_click' && 'border-primary bg-primary/5 ring-1 ring-primary/20'">
+                                <input type="radio" x-model="accessType" value="join_on_click" class="mt-0.5 text-primary focus:ring-primary shrink-0">
+                                <div class="ml-2 min-w-0">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">Join on click</span>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">Users can join instantly after signing in</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">Instant join after sign-in</p>
                                 </div>
                             </label>
-                            <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition"
-                                   :class="accessType === 'invite_only' && 'border-primary bg-primary/5'">
-                                <input type="radio" x-model="accessType" value="invite_only" class="mt-0.5 text-primary focus:ring-primary">
-                                <div class="ml-3">
+                            <label class="flex items-start p-3 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition h-full"
+                                   :class="accessType === 'invite_only' && 'border-primary bg-primary/5 ring-1 ring-primary/20'">
+                                <input type="radio" x-model="accessType" value="invite_only" class="mt-0.5 text-primary focus:ring-primary shrink-0">
+                                <div class="ml-2 min-w-0">
                                     <span class="text-sm font-medium text-gray-900 dark:text-white">Invite only</span>
-                                    <p class="text-xs text-gray-500 dark:text-gray-400">You must approve each join request</p>
+                                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 leading-snug">Approve each request</p>
                                 </div>
                             </label>
                         </div>
@@ -1509,42 +1534,55 @@ foreach ($boardMembers as $member) {
                     <div class="mb-5">
                         <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Link expires</label>
                         <select x-model="expiresIn" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
-                            <option value="never">Never</option>
-                            <option value="1day">In 1 day</option>
+                            <option value="1day">In 24 hours (default)</option>
                             <option value="7days">In 7 days</option>
                             <option value="30days">In 30 days</option>
+                            <option value="never">Never</option>
                         </select>
                     </div>
-                    
-                    <!-- Advanced Options Toggle -->
-                    <button @click="showAdvanced = !showAdvanced" class="flex items-center text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white mb-4">
-                        <i class="fas fa-cog mr-2"></i>
-                        <span>Advanced options</span>
-                        <i class="fas fa-chevron-down ml-2 transition-transform" :class="showAdvanced && 'rotate-180'"></i>
-                    </button>
-                    
-                    <!-- Advanced Options -->
-                    <div x-show="showAdvanced" x-transition class="space-y-4 mb-5 pl-4 border-l-2 border-gray-200 dark:border-gray-700">
-                        <!-- Max Uses -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Maximum uses (optional)</label>
-                            <input type="number" x-model="maxUses" min="1" placeholder="Unlimited"
-                                   class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
+
+                    <div class="mb-5 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                        <button
+                            type="button"
+                            @click="showShareAdvanced = !showShareAdvanced"
+                            class="w-full flex items-center justify-between gap-2 px-4 py-3 text-sm font-medium text-gray-800 dark:text-gray-200 bg-gray-50 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700/80 transition-colors"
+                            :aria-expanded="showShareAdvanced"
+                        >
+                            <span class="flex items-center gap-2">
+                                <i class="fas fa-sliders-h text-gray-500 dark:text-gray-400 text-xs"></i>
+                                Advanced
+                            </span>
+                            <i class="fas fa-chevron-down text-gray-400 text-xs transition-transform duration-200" :class="showShareAdvanced && 'rotate-180'"></i>
+                        </button>
+                        <div
+                            x-show="showShareAdvanced"
+                            x-transition:enter="transition ease-out duration-200"
+                            x-transition:enter-start="opacity-0 -translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-150"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 -translate-y-1"
+                            x-cloak
+                            class="px-4 pb-4 pt-1 space-y-4 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 relative z-0"
+                        >
+                            <p class="text-xs text-gray-500 dark:text-gray-400 pt-2">Optional limits for this link</p>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Maximum uses</label>
+                                <input type="number" x-model="maxUses" min="1" placeholder="Unlimited" :disabled="singleUse"
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary disabled:opacity-50">
+                                <p class="text-xs text-gray-500 mt-1" x-show="singleUse">Single-use links are limited to one use.</p>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Company email domain</label>
+                                <input type="text" x-model="restrictDomain" placeholder="company.com or @company.com"
+                                       class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
+                                <p class="text-xs text-gray-500 mt-1">Only users with this email domain can use the link</p>
+                            </div>
+                            <label class="flex items-start gap-2">
+                                <input type="checkbox" x-model="singleUse" @change="if (singleUse) maxUses = ''" class="mt-0.5 rounded text-primary focus:ring-primary">
+                                <span class="text-sm text-gray-700 dark:text-gray-300">Single use — invalidate after the first successful join or access request</span>
+                            </label>
                         </div>
-                        
-                        <!-- Domain Restriction -->
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Restrict to domain (optional)</label>
-                            <input type="text" x-model="restrictDomain" placeholder="@company.com"
-                                   class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
-                            <p class="text-xs text-gray-500 mt-1">Only users with this email domain can join</p>
-                        </div>
-                        
-                        <!-- Single Use -->
-                        <label class="flex items-center">
-                            <input type="checkbox" x-model="singleUse" class="rounded text-primary focus:ring-primary">
-                            <span class="ml-2 text-sm text-gray-700 dark:text-gray-300">Single use (link becomes invalid after first use)</span>
-                        </label>
                     </div>
                     
                     <!-- Info Notice -->
@@ -1582,57 +1620,136 @@ foreach ($boardMembers as $member) {
                     </button>
                 </div>
             </div>
-            
-            <!-- Manage Links Tab -->
-            <div x-show="activeTab === 'manage'" x-cloak>
-                <div x-show="loadingLinks" class="text-center py-8">
-                    <svg class="animate-spin h-8 w-8 text-primary mx-auto" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    <p class="text-sm text-gray-500 mt-2">Loading share links...</p>
-                </div>
-                
-                <div x-show="!loadingLinks && existingLinks.length === 0" class="text-center py-8">
-                    <div class="w-12 h-12 mx-auto mb-3 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                        <i class="fas fa-link text-gray-400"></i>
+
+            <!-- Share Link via Email Tab -->
+            <div x-show="activeTab === 'email'" x-cloak>
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Invite by email</label>
+                    <div
+                        class="share-invite-field flex items-center gap-2 rounded border bg-white dark:bg-gray-700 pl-3 pr-1 py-1"
+                        :class="{
+                            'border-gray-300 dark:border-gray-600 focus-within:border-gray-500 dark:focus-within:border-gray-400': !inviteInputState,
+                            'border-red-500 dark:border-red-500': inviteInputState === 'error',
+                            'border-emerald-500 dark:border-emerald-500': inviteInputState === 'success'
+                        }"
+                    >
+                        <span class="w-4 h-4 flex items-center justify-center shrink-0 text-sm">
+                            <i x-show="inviteInputState === 'success'" x-cloak class="fas fa-check text-emerald-500"></i>
+                            <i x-show="inviteInputState === 'error'" x-cloak class="fas fa-exclamation-circle text-red-500"></i>
+                            <i x-show="!inviteInputState" class="far fa-envelope text-gray-400"></i>
+                        </span>
+                        <input
+                            type="email"
+                            x-ref="inviteEmailInput"
+                            x-model="inviteEmailDraft"
+                            @input="clearInviteInputState()"
+                            @keydown.enter.prevent="addInviteEmail()"
+                            @keydown="if ([',', ';'].includes($event.key)) { $event.preventDefault(); addInviteEmail(); }"
+                            @paste="handleInvitePaste($event)"
+                            placeholder="name@company.com"
+                            autocomplete="off"
+                            spellcheck="false"
+                            class="share-invite-input flex-1 min-w-0 px-0 py-1.5 text-sm bg-transparent text-gray-900 dark:text-white border-0 outline-none focus:outline-none focus:ring-0 focus:border-0 shadow-none placeholder-gray-400"
+                        >
+                        <button
+                            type="button"
+                            @click="addInviteEmail()"
+                            :disabled="!inviteEmailDraft.trim()"
+                            class="share-invite-add shrink-0 px-3 py-1.5 text-xs font-medium rounded-sm text-white transition-colors duration-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                            style="background-color: #171717;"
+                            onmouseover="if(!this.disabled) this.style.backgroundColor='#404040'"
+                            onmouseout="this.style.backgroundColor='#171717'"
+                        >
+                            Add
+                        </button>
                     </div>
-                    <p class="text-sm text-gray-500 dark:text-gray-400">No share links created yet</p>
-                    <button @click="activeTab = 'create'" class="text-sm text-primary hover:underline mt-2">
-                        Create your first link
-                    </button>
-                </div>
-                
-                <div x-show="!loadingLinks && existingLinks.length > 0" class="space-y-3 max-h-80 overflow-y-auto">
-                    <template x-for="link in existingLinks" :key="link.id">
-                        <div class="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-                            <div class="flex items-start justify-between mb-2">
-                                <div>
-                                    <span class="text-xs font-medium px-2 py-0.5 rounded-full"
-                                          :class="{
-                                              'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400': link.status === 'active',
-                                              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': link.status === 'revoked',
-                                              'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400': link.status === 'expired',
-                                              'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400': link.status === 'exhausted' || link.status === 'used'
-                                          }"
-                                          x-text="link.status.charAt(0).toUpperCase() + link.status.slice(1)">
-                                    </span>
-                                </div>
-                                <button x-show="link.status === 'active'" @click="revokeLink(link.id)" 
-                                        class="text-xs text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300">
-                                    <i class="fas fa-ban mr-1"></i>Revoke
-                                </button>
-                            </div>
-                            <div class="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-                                <p><span class="font-medium">Type:</span> <span x-text="formatAccessType(link.access_type)"></span></p>
-                                <p><span class="font-medium">Role:</span> <span x-text="({admin:'Admin', member:'Member'})[link.role_on_join] || 'Member'"></span></p>
-                                <p><span class="font-medium">Uses:</span> <span x-text="link.uses + (link.max_uses ? '/' + link.max_uses : '')"></span></p>
-                                <p x-show="link.expires_at"><span class="font-medium">Expires:</span> <span x-text="formatDate(link.expires_at)"></span></p>
-                                <p class="text-xs text-gray-400">Created <span x-text="formatDate(link.created_at)"></span></p>
-                            </div>
+                    <div class="mt-1.5 min-h-[1.25rem]">
+                        <p
+                            x-show="inviteInputMessage"
+                            x-cloak
+                            class="text-xs"
+                            :class="inviteInputState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'"
+                            x-text="inviteInputMessage"
+                        ></p>
+                        <p x-show="!inviteInputMessage" class="text-xs text-gray-400 dark:text-gray-500">Press Enter to add each address</p>
+                    </div>
+
+                    <div x-show="inviteQueue.length > 0" x-cloak class="mt-4">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                                Recipients <span class="text-gray-400 dark:text-gray-500 font-normal normal-case tracking-normal" x-text="'(' + inviteQueue.length + ')'"></span>
+                            </span>
+                            <button type="button" @click="clearInviteQueue()" class="share-invite-clear text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                Clear all
+                            </button>
                         </div>
-                    </template>
+                        <ul class="space-y-1">
+                            <template x-for="email in inviteQueue" :key="email">
+                                <li class="flex items-center gap-2.5 rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40 px-2.5 py-1.5">
+                                    <span class="w-5 h-5 rounded-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-100 flex items-center justify-center text-[10px] font-semibold shrink-0 uppercase" x-text="email.charAt(0)"></span>
+                                    <span class="flex-1 min-w-0 text-sm text-gray-800 dark:text-gray-100 truncate" x-text="email"></span>
+                                    <button
+                                        type="button"
+                                        @click="removeInviteEmail(email)"
+                                        class="share-invite-remove w-6 h-6 rounded-sm flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-100"
+                                        :aria-label="'Remove ' + email"
+                                    >
+                                        <i class="fas fa-times text-xs"></i>
+                                    </button>
+                                </li>
+                            </template>
+                        </ul>
+                    </div>
                 </div>
+
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role when joining</label>
+                    <select x-model="emailRoleOnJoin" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
+                        <option value="member">Member — Can edit tasks and lists</option>
+                        <option value="admin">Admin — Can manage members and board settings</option>
+                    </select>
+                </div>
+
+                <div class="mb-5">
+                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Link expires</label>
+                    <select x-model="emailExpiresIn" class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary focus:border-primary">
+                        <option value="1day">In 24 hours (default)</option>
+                        <option value="7days">In 7 days</option>
+                        <option value="30days">In 30 days</option>
+                        <option value="never">Never</option>
+                    </select>
+                </div>
+
+                <div class="bg-neutral-100 dark:bg-neutral-800/60 border border-neutral-200 dark:border-neutral-700 rounded-lg p-3 mb-5">
+                    <div class="flex items-start">
+                        <i class="fas fa-info-circle text-neutral-500 mt-0.5 mr-2"></i>
+                        <p class="text-xs text-neutral-700 dark:text-neutral-200">
+                            Each recipient gets a personal join link. After signing in, they join the board immediately—no access request approval needed.
+                        </p>
+                    </div>
+                </div>
+
+                <div x-show="emailError" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-5">
+                    <div class="flex items-start">
+                        <i class="fas fa-exclamation-circle text-red-500 mt-0.5 mr-2"></i>
+                        <p class="text-xs text-red-800 dark:text-red-200" x-text="emailError"></p>
+                    </div>
+                </div>
+
+                <button type="button" @click="sendEmailInvites()" :disabled="emailLoading || !canSendEmailInvites"
+                        class="w-full px-4 py-2.5 text-sm font-medium text-white rounded-lg shadow-md transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                        style="background-color: #171717;"
+                        onmouseover="if(!this.disabled) this.style.backgroundColor='#404040'"
+                        onmouseout="this.style.backgroundColor='#171717'">
+                    <span x-show="!emailLoading"><i class="fas fa-paper-plane mr-2"></i>Send Invitation</span>
+                    <span x-show="emailLoading" class="flex items-center">
+                        <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Sending...
+                    </span>
+                </button>
             </div>
             
             <!-- Access Requests Tab -->
@@ -1695,45 +1812,194 @@ foreach ($boardMembers as $member) {
 const boardId = <?php echo $boardId; ?>;
 const canReviewRequests = <?php echo $canReviewRequests ? 'true' : 'false'; ?>;
 const canEdit = <?php echo $canEdit ? 'true' : 'false'; ?>;
+const canManage = <?php echo $canManage ? 'true' : 'false'; ?>;
+const canLeaveBoard = <?php echo $canLeaveBoard ? 'true' : 'false'; ?>;
 
 // Share Modal Data and Functions
+const SHARE_INVITE_EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
+const SHARE_INVITE_MAX_RECIPIENTS = 25;
+
 function shareModalData() {
     return {
         activeTab: 'create',
         accessType: 'join_on_click',
         roleOnJoin: 'member',
-        expiresIn: 'never',
+        expiresIn: '1day',
         maxUses: '',
         restrictDomain: '',
         singleUse: false,
-        showAdvanced: false,
+        showShareAdvanced: false,
         loading: false,
         error: '',
         generatedLink: '',
         copied: false,
-        existingLinks: [],
-        loadingLinks: false,
         joinRequests: [],
         loadingRequests: false,
         requestsError: '',
         pendingRequests: <?php echo (int) $pendingRequestsCount; ?>,
-        
+        emailRoleOnJoin: 'member',
+        emailExpiresIn: '1day',
+        emailLoading: false,
+        emailError: '',
+        inviteEligibilityLoading: false,
+        inviteBoardEmails: {},
+        inviteEmailDraft: '',
+        inviteQueue: [],
+        inviteInputState: '',
+        inviteInputMessage: '',
+        _inviteStateTimer: null,
+
+        get canSendEmailInvites() {
+            return this.inviteQueue.length > 0 && this.inviteQueue.length <= SHARE_INVITE_MAX_RECIPIENTS;
+        },
+
+        init() {
+            this.$watch('activeTab', (tab) => {
+                if (tab === 'email') {
+                    this.loadInviteEligibility();
+                    this.$nextTick(() => this.$refs.inviteEmailInput?.focus());
+                }
+            });
+        },
+
+        setInviteInputState(state, message, autoClearMs) {
+            clearTimeout(this._inviteStateTimer);
+            this.inviteInputState = state;
+            this.inviteInputMessage = message;
+            if (autoClearMs) {
+                this._inviteStateTimer = setTimeout(() => {
+                    this.inviteInputState = '';
+                    this.inviteInputMessage = '';
+                }, autoClearMs);
+            }
+        },
+
+        clearInviteInputState() {
+            if (this.inviteInputState === 'error') {
+                clearTimeout(this._inviteStateTimer);
+                this.inviteInputState = '';
+                this.inviteInputMessage = '';
+            }
+        },
+
+        validateInviteEmail(raw) {
+            const email = String(raw || '').trim().toLowerCase();
+            if (!email) {
+                return { ok: false, message: 'Enter an email address' };
+            }
+            if (!SHARE_INVITE_EMAIL_RE.test(email)) {
+                return { ok: false, message: 'That doesn’t look like a valid email address' };
+            }
+            if (this.inviteQueue.includes(email)) {
+                return { ok: false, message: 'Already added to the list' };
+            }
+            if (this.inviteBoardEmails[email]) {
+                return { ok: false, message: 'This person is already a member of the board' };
+            }
+            if (this.inviteQueue.length >= SHARE_INVITE_MAX_RECIPIENTS) {
+                return { ok: false, message: `You can invite up to ${SHARE_INVITE_MAX_RECIPIENTS} people at once` };
+            }
+            return { ok: true, email };
+        },
+
+        addInviteEmail(value) {
+            const candidate = value !== undefined ? value : this.inviteEmailDraft;
+            const result = this.validateInviteEmail(candidate);
+            if (!result.ok) {
+                this.setInviteInputState('error', result.message);
+                return false;
+            }
+            this.inviteQueue.push(result.email);
+            this.inviteEmailDraft = '';
+            this.emailError = '';
+            this.setInviteInputState('success', 'Added', 1400);
+            this.$nextTick(() => this.$refs.inviteEmailInput?.focus());
+            return true;
+        },
+
+        handleInvitePaste(event) {
+            const text = (event.clipboardData || window.clipboardData)?.getData('text') || '';
+            const parts = text.split(/[\s,;]+/).map((p) => p.trim()).filter(Boolean);
+            if (parts.length <= 1) {
+                return;
+            }
+            event.preventDefault();
+            let added = 0;
+            let lastError = '';
+            parts.forEach((part) => {
+                const result = this.validateInviteEmail(part);
+                if (result.ok) {
+                    this.inviteQueue.push(result.email);
+                    added += 1;
+                } else {
+                    lastError = result.message;
+                }
+            });
+            this.inviteEmailDraft = '';
+            if (added > 0) {
+                this.setInviteInputState('success', added === 1 ? 'Added 1 address' : `Added ${added} addresses`, 1800);
+            } else if (lastError) {
+                this.setInviteInputState('error', lastError);
+            }
+        },
+
+        removeInviteEmail(email) {
+            this.inviteQueue = this.inviteQueue.filter((e) => e !== email);
+        },
+
+        clearInviteQueue() {
+            this.inviteQueue = [];
+        },
+
+        async loadInviteEligibility() {
+            if (this.inviteEligibilityLoading) {
+                return;
+            }
+            this.inviteEligibilityLoading = true;
+            try {
+                const response = await fetch(`${window.BASE_PATH || ''}/actions/share/invite_eligibility.php?board_id=${boardId}`);
+                const data = await response.json();
+                if (data.success) {
+                    const boardList = data.board_emails || [];
+                    this.inviteBoardEmails = Object.fromEntries(boardList.map((e) => [String(e).toLowerCase(), true]));
+                }
+            } catch (err) {
+                console.error('Invite eligibility check failed:', err);
+            } finally {
+                this.inviteEligibilityLoading = false;
+                // Drop any queued addresses that turned out to be existing members
+                this.inviteQueue = this.inviteQueue.filter((e) => !this.inviteBoardEmails[e]);
+            }
+        },
+
         resetForm() {
             this.accessType = 'join_on_click';
             this.roleOnJoin = 'member';
-            this.expiresIn = 'never';
+            this.expiresIn = '1day';
             this.maxUses = '';
             this.restrictDomain = '';
             this.singleUse = false;
-            this.showAdvanced = false;
+            this.showShareAdvanced = false;
             this.error = '';
         },
         
         async generateLink() {
             this.loading = true;
             this.error = '';
+
+            if (!this.singleUse && this.maxUses !== '' && this.maxUses !== null) {
+                const parsedMax = parseInt(this.maxUses, 10);
+                if (!Number.isInteger(parsedMax) || parsedMax < 1) {
+                    this.error = 'Maximum uses must be a number of 1 or greater';
+                    this.loading = false;
+                    return;
+                }
+            }
             
             const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+            const maxUsesPayload = this.singleUse
+                ? 1
+                : (this.maxUses !== '' && this.maxUses !== null ? parseInt(this.maxUses, 10) : null);
             
             try {
                 const response = await fetch(window.BASE_PATH + '/actions/share/create.php', {
@@ -1747,8 +2013,8 @@ function shareModalData() {
                         access_type: this.accessType,
                         role_on_join: this.roleOnJoin,
                         expires_in: this.expiresIn,
-                        max_uses: this.maxUses ? parseInt(this.maxUses) : null,
-                        restrict_domain: this.restrictDomain,
+                        max_uses: maxUsesPayload,
+                        restrict_domain: this.restrictDomain.trim(),
                         single_use: this.singleUse,
                         _token: csrfToken
                     })
@@ -1767,6 +2033,68 @@ function shareModalData() {
                 this.error = 'An error occurred. Please try again.';
             } finally {
                 this.loading = false;
+            }
+        },
+
+        async sendEmailInvites() {
+            // If the user typed an address but didn't press Enter, try to add it first
+            if (this.inviteEmailDraft.trim()) {
+                if (!this.addInviteEmail()) {
+                    return;
+                }
+            }
+
+            if (!this.canSendEmailInvites) {
+                this.emailError = 'Add at least one email address';
+                return;
+            }
+
+            this.emailLoading = true;
+            this.emailError = '';
+
+            const trimmed = this.inviteQueue.join(', ');
+
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+            try {
+                const response = await fetch(window.BASE_PATH + '/actions/share/invite_email.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken
+                    },
+                    body: JSON.stringify({
+                        board_id: boardId,
+                        emails: trimmed,
+                        role_on_join: this.emailRoleOnJoin,
+                        expires_in: this.emailExpiresIn,
+                        _token: csrfToken
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    this.inviteQueue = [];
+                    this.inviteEmailDraft = '';
+                    if (typeof showToast === 'function') {
+                        showToast(data.message || 'Invitation sent', 'success');
+                    }
+                    if (data.failed && data.failed.length) {
+                        this.emailError = 'Some invitations could not be sent: ' + data.failed.join(', ');
+                    }
+                    if (data.skipped && data.skipped.length) {
+                        this.emailError = (this.emailError ? this.emailError + ' ' : '')
+                            + 'Skipped existing members: ' + data.skipped.join(', ');
+                    }
+                } else {
+                    this.emailError = data.message || 'Failed to send invitations';
+                }
+            } catch (err) {
+                console.error('Error sending share invites:', err);
+                this.emailError = 'An error occurred. Please try again.';
+            } finally {
+                this.emailLoading = false;
             }
         },
         
@@ -1808,54 +2136,6 @@ function shareModalData() {
                 }
             } else if (typeof showToast === 'function') {
                 showToast('Select the link and copy it manually', 'error');
-            }
-        },
-        
-        async loadExistingLinks() {
-            this.loadingLinks = true;
-            
-            try {
-                const response = await fetch(`${window.BASE_PATH}/actions/share/get.php?board_id=${boardId}`);
-                const data = await response.json();
-                
-                if (data.success) {
-                    this.existingLinks = data.share_links;
-                }
-            } catch (err) {
-                console.error('Error loading share links:', err);
-            } finally {
-                this.loadingLinks = false;
-            }
-        },
-        
-        async revokeLink(linkId) {
-            if (!confirm('Are you sure you want to revoke this link? Anyone with this link will no longer be able to join.')) {
-                return;
-            }
-            
-            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-            
-            try {
-                const response = await fetch(window.BASE_PATH + '/actions/share/revoke.php', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': csrfToken
-                    },
-                    body: JSON.stringify({ share_link_id: linkId, _token: csrfToken })
-                });
-                
-                const data = await response.json();
-                
-                if (data.success) {
-                    showToast('Link revoked successfully', 'success');
-                    this.loadExistingLinks();
-                } else {
-                    showToast(data.message || 'Failed to revoke link', 'error');
-                }
-            } catch (err) {
-                console.error('Error revoking link:', err);
-                showToast('An error occurred', 'error');
             }
         },
         
@@ -1983,6 +2263,11 @@ function showShareModal(tab) {
     }
     if (tab === 'requests' && canReviewRequests) {
         data.activeTab = 'requests';
+    } else if (tab === 'email') {
+        data.activeTab = 'email';
+    }
+    if (data.activeTab === 'email' && typeof data.loadInviteEligibility === 'function') {
+        data.loadInviteEligibility();
     }
     if (typeof data.loadJoinRequests === 'function') {
         data.loadJoinRequests();
@@ -2269,6 +2554,10 @@ function toggleListMenu(menuId) {
 
 // Show edit list modal
 function showEditListModal(listId, currentTitle) {
+    if (!window.boardCanManage) {
+        if (window.showToast) showToast('Only Admins can rename lists', 'error');
+        return;
+    }
     // Close any open menus
     document.querySelectorAll('.list-menu').forEach(menu => {
         menu.classList.add('hidden');
@@ -2372,6 +2661,10 @@ async function updateList(event, listId) {
 
 // Delete list
 window.deleteList = async function deleteList(listId) {
+    if (!window.boardCanManage) {
+        showToast('Only Admins can delete lists', 'error');
+        return;
+    }
     const numericListId = Number.parseInt(listId, 10);
     if (!Number.isInteger(numericListId) || numericListId <= 0) {
         showToast('Invalid list. Please refresh the page and try again.', 'error');
@@ -2481,6 +2774,10 @@ document.addEventListener('keydown', function(e) {
 // =====================================================
 
 function showLeaveBoardConfirm() {
+    if (!canLeaveBoard) {
+        showToast('You cannot leave this board on your own. Ask an Admin to remove you.', 'error');
+        return;
+    }
     document.getElementById('leaveBoardModal').classList.remove('hidden');
 }
 
@@ -2489,6 +2786,10 @@ function hideLeaveBoardModal() {
 }
 
 async function leaveBoard() {
+    if (!canLeaveBoard) {
+        showToast('You cannot leave this board on your own. Ask an Admin to remove you.', 'error');
+        return;
+    }
     const btn = document.getElementById('leaveBoardBtn');
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -2768,11 +3069,144 @@ document.getElementById('transferOwnershipModal')?.addEventListener('click', fun
 });
 
 // Activity modal controls
+function boardActivityItemHtml(activity) {
+    const name = escapeHtml(activity.user_name || 'System');
+    const description = escapeHtml(activity.description || activity.action || 'updated');
+    const initial = escapeHtml((activity.user_name || 'S').charAt(0).toUpperCase());
+    const when = escapeHtml(activity.time_ago || '');
+    return '<div class="flex gap-3 items-start bg-white dark:bg-gray-800/80 rounded-lg px-3 py-2 border border-gray-100 dark:border-gray-800 shadow-sm" data-activity-id="' + Number(activity.id || 0) + '">'
+        + '<div class="h-8 w-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center text-primary font-semibold text-sm">' + initial + '</div>'
+        + '<div class="flex-1 min-w-0"><p class="text-sm text-gray-900 dark:text-gray-100"><span class="font-semibold">' + name + '</span> ' + description + '</p>'
+        + '<p class="text-xs text-gray-500">' + when + '</p></div></div>';
+}
+
+function syncBoardActivityBounds(feed) {
+    const rows = feed.querySelectorAll('[data-activity-id]');
+    if (!rows.length) {
+        window.__planifyActivityNewestId = 0;
+        window.__planifyActivityOldestId = 0;
+        return;
+    }
+    window.__planifyActivityNewestId = Number(rows[0].getAttribute('data-activity-id')) || 0;
+    window.__planifyActivityOldestId = Number(rows[rows.length - 1].getAttribute('data-activity-id')) || 0;
+}
+
+function setBoardActivityStatus(feed, hasMore, loadingMore) {
+    let status = feed.querySelector('[data-activity-status]');
+    if (!status) {
+        status = document.createElement('div');
+        status.setAttribute('data-activity-status', '1');
+        status.className = 'text-center text-xs text-gray-400 py-2';
+        feed.appendChild(status);
+    }
+    if (loadingMore) {
+        status.textContent = 'Loading…';
+        status.classList.remove('hidden');
+    } else if (!hasMore && feed.querySelector('[data-activity-id]')) {
+        status.textContent = '';
+        status.classList.add('hidden');
+    } else {
+        status.textContent = '';
+        status.classList.add('hidden');
+    }
+}
+
+window.refreshBoardActivity = async function (mode) {
+    mode = mode || 'newer';
+    if (window.__planifyActivityLoading) {
+        window.__planifyActivityQueued = mode;
+        return;
+    }
+    const feed = document.getElementById('boardActivityFeed');
+    if (!feed || !window.currentBoardId) return;
+
+    if (!window.__planifyActivityNewestId) {
+        syncBoardActivityBounds(feed);
+    }
+
+    let url = window.BASE_PATH + '/actions/activity/board.php?board_id=' + encodeURIComponent(window.currentBoardId);
+    if (mode === 'older') {
+        if (!window.__planifyActivityHasMore || !window.__planifyActivityOldestId) return;
+        url += '&before_id=' + encodeURIComponent(window.__planifyActivityOldestId);
+    } else if (mode === 'newer' && window.__planifyActivityNewestId) {
+        url += '&after_id=' + encodeURIComponent(window.__planifyActivityNewestId);
+    } else {
+        mode = 'reset';
+    }
+
+    window.__planifyActivityLoading = true;
+    if (mode === 'older') setBoardActivityStatus(feed, true, true);
+
+    try {
+        const response = await fetch(url, { cache: 'no-store' });
+        const data = await response.json();
+        if (!data.success) return;
+
+        const items = data.activities || [];
+        if (mode === 'reset') {
+            if (!items.length) {
+                feed.innerHTML = '<div class="text-center text-sm text-gray-500 py-6">No activity yet.</div>';
+                window.__planifyActivityHasMore = false;
+                window.__planifyActivityNewestId = 0;
+                window.__planifyActivityOldestId = 0;
+            } else {
+                feed.innerHTML = items.map(boardActivityItemHtml).join('');
+                window.__planifyActivityHasMore = !!data.has_more;
+                syncBoardActivityBounds(feed);
+                setBoardActivityStatus(feed, window.__planifyActivityHasMore, false);
+            }
+        } else if (mode === 'older' && items.length) {
+            const status = feed.querySelector('[data-activity-status]');
+            const html = items.map(boardActivityItemHtml).join('');
+            if (status) {
+                status.insertAdjacentHTML('beforebegin', html);
+            } else {
+                feed.insertAdjacentHTML('beforeend', html);
+            }
+            window.__planifyActivityHasMore = !!data.has_more;
+            syncBoardActivityBounds(feed);
+            setBoardActivityStatus(feed, window.__planifyActivityHasMore, false);
+        } else if (mode === 'newer' && items.length) {
+            const empty = feed.querySelector('.text-center');
+            if (empty && !feed.querySelector('[data-activity-id]')) {
+                feed.innerHTML = '';
+            }
+            feed.insertAdjacentHTML('afterbegin', items.map(boardActivityItemHtml).join(''));
+            syncBoardActivityBounds(feed);
+        } else if (mode === 'older') {
+            window.__planifyActivityHasMore = false;
+            setBoardActivityStatus(feed, false, false);
+        }
+    } catch (error) {
+        console.error('Board activity refresh failed', error);
+        if (mode === 'older') setBoardActivityStatus(feed, window.__planifyActivityHasMore, false);
+    } finally {
+        window.__planifyActivityLoading = false;
+        if (window.__planifyActivityQueued) {
+            const queued = window.__planifyActivityQueued;
+            window.__planifyActivityQueued = '';
+            window.refreshBoardActivity(queued === true ? 'newer' : queued);
+        }
+    }
+};
+
+document.getElementById('boardActivityFeed')?.addEventListener('scroll', function () {
+    const feed = this;
+    if (window.__planifyActivityLoading || window.__planifyActivityHasMore === false) return;
+    if (feed.scrollTop + feed.clientHeight >= feed.scrollHeight - 48) {
+        window.refreshBoardActivity('older');
+    }
+});
+
 function showActivityModal() {
     const modal = document.getElementById('activityModal');
     if (!modal) return;
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
+    window.__planifyActivityHasMore = true;
+    if (typeof window.refreshBoardActivity === 'function') {
+        window.refreshBoardActivity('reset');
+    }
 }
 
 function closeActivityModal() {
@@ -2790,6 +3224,7 @@ function closeActivityModal() {
 window.currentBoardId = <?php echo json_encode($boardId); ?>;
 window.PLANIFY_BOARD_REF = <?php echo json_encode(encryptId((int) $boardId)); ?>;
 window.boardCanEdit = <?php echo !empty($canEdit) ? 'true' : 'false'; ?>;
+window.boardCanManage = <?php echo !empty($canManage) ? 'true' : 'false'; ?>;
 window.PLANIFY_DEEP_LINK = <?php echo json_encode([
     'cardId' => $deepLinkCardId,
     'listId' => $deepLinkListId,
@@ -3029,6 +3464,7 @@ window.isDragging = false;
 
 // User permission - set from PHP
 window.userCanEdit = <?php echo json_encode($canEdit); ?>;
+window.userCanManage = <?php echo json_encode($canManage); ?>;
 
 const cardSortables = [];
 
@@ -3402,18 +3838,21 @@ function createCardHTML(card) {
     const isCompleted = card.is_completed ? 'card-completed' : '';
     const completedClass = card.is_completed ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 dark:border-gray-500';
     const titleClass = card.is_completed ? 'text-gray-500 dark:text-gray-400 line-through' : 'text-gray-900 dark:text-gray-100';
-    const actionButtons = window.boardCanEdit ? `
-        <div class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex gap-1 transition-opacity z-10">
+    const editBtn = window.boardCanManage ? `
             <button type="button" onclick="event.stopPropagation(); showEditCardModal(${card.id});"
                     class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-primary dark:text-gray-300"
                     title="Edit task" aria-label="Edit task">
                 <i class="fas fa-pen text-[10px]"></i>
-            </button>
+            </button>` : '';
+    const deleteBtn = window.boardCanManage ? `
             <button type="button" onclick="event.stopPropagation(); window.deleteCard(${card.id});"
                     class="card-action-btn p-1 bg-white/95 dark:bg-gray-800/95 shadow-sm rounded text-gray-600 hover:text-red-500 dark:text-gray-300"
                     title="Delete task" aria-label="Delete task">
                 <i class="fas fa-trash text-[10px]"></i>
-            </button>
+            </button>` : '';
+    const actionButtons = (editBtn || deleteBtn) ? `
+        <div class="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 flex gap-1 transition-opacity z-10">
+            ${editBtn}${deleteBtn}
         </div>` : '';
     
     return `

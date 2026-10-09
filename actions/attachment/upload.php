@@ -79,6 +79,14 @@ try {
         $stmt->bind_param('iisssis', $cardId, $_SESSION['user_id'], $filename, $file['name'], $relativePath, $file['size'], $mimeType);
         
         if ($stmt->execute()) {
+            logActivity(
+                $conn,
+                (int) $card['board_id'],
+                (int) $_SESSION['user_id'],
+                'attachment_added',
+                'added an attachment "' . $file['name'] . '"',
+                (int) $cardId
+            );
             // Send email notification to assignees
             MailHelper::sendTaskUpdateNotifications(
                 $conn,

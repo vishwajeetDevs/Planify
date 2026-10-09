@@ -39,9 +39,8 @@ try {
     $boardId = $list['board_id'];
     $listTitle = $list['title'];
     
-    // Check permission
-    if (!canEditBoard($conn, $userId, $boardId)) {
-        jsonResponse(['success' => false, 'message' => 'Permission denied'], 403);
+    if (!canManageBoard($conn, $userId, $boardId)) {
+        jsonResponse(['success' => false, 'message' => 'Only Admins can delete lists'], 403);
     }
     
     // Delete list (cascades to cards)

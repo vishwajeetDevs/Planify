@@ -40,47 +40,14 @@ try {
         ], 404);
     }
     
-    // Check if link is revoked
-    if ($shareLink['is_revoked']) {
+    $linkState = validateShareLinkState($shareLink);
+    if (!$linkState['ok']) {
         jsonResponse([
-            'success' => false, 
-            'message' => 'This link has been revoked',
-            'error_code' => 'REVOKED',
+            'success' => false,
+            'message' => $linkState['message'],
+            'error_code' => $linkState['error_code'],
             'board_name' => $shareLink['board_name'],
-            'owner_name' => $shareLink['owner_name']
-        ], 410);
-    }
-    
-    // Check if link is expired
-    if ($shareLink['expires_at'] && strtotime($shareLink['expires_at']) < time()) {
-        jsonResponse([
-            'success' => false, 
-            'message' => 'This link has expired',
-            'error_code' => 'EXPIRED',
-            'board_name' => $shareLink['board_name'],
-            'owner_name' => $shareLink['owner_name']
-        ], 410);
-    }
-    
-    // Check if max uses reached
-    if ($shareLink['max_uses'] && $shareLink['uses'] >= $shareLink['max_uses']) {
-        jsonResponse([
-            'success' => false, 
-            'message' => 'This link has reached its maximum number of uses',
-            'error_code' => 'MAX_USES_REACHED',
-            'board_name' => $shareLink['board_name'],
-            'owner_name' => $shareLink['owner_name']
-        ], 410);
-    }
-    
-    // Check if single use and already used
-    if ($shareLink['single_use'] && $shareLink['uses'] > 0) {
-        jsonResponse([
-            'success' => false, 
-            'message' => 'This link has already been used',
-            'error_code' => 'ALREADY_USED',
-            'board_name' => $shareLink['board_name'],
-            'owner_name' => $shareLink['owner_name']
+            'owner_name' => $shareLink['owner_name'],
         ], 410);
     }
     
@@ -105,21 +72,19 @@ try {
             $existingRole = $membership['role'];
         }
         
-        // Check domain restriction
         if ($shareLink['restrict_domain']) {
             $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
             $stmt->bind_param("i", $userId);
             $stmt->execute();
             $user = $stmt->get_result()->fetch_assoc();
-            
-            $userDomain = '@' . substr(strrchr($user['email'], '@'), 1);
-            if (strtolower($userDomain) !== strtolower($shareLink['restrict_domain'])) {
+
+            if (!$user || !userEmailMatchesShareDomain($user['email'], $shareLink['restrict_domain'])) {
                 jsonResponse([
                     'success' => false,
                     'message' => 'This link is restricted to ' . $shareLink['restrict_domain'] . ' email addresses',
                     'error_code' => 'DOMAIN_RESTRICTED',
                     'board_name' => $shareLink['board_name'],
-                    'owner_name' => $shareLink['owner_name']
+                    'owner_name' => $shareLink['owner_name'],
                 ], 403);
             }
         }

@@ -33,10 +33,19 @@ if (strpos($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') !== false) {
 $boardId = intval($input['board_id'] ?? 0);
 $accessType = $input['access_type'] ?? 'join_on_click';
 $roleOnJoin = $input['role_on_join'] ?? 'member';
-$expiresIn = $input['expires_in'] ?? null; // 'never', '1day', '7days', '30days', or custom datetime
-$maxUses = isset($input['max_uses']) ? intval($input['max_uses']) : null;
-$restrictDomain = trim($input['restrict_domain'] ?? '');
-$singleUse = isset($input['single_use']) ? (bool)$input['single_use'] : false;
+$expiresIn = $input['expires_in'] ?? '1day';
+if ($expiresIn === '' || $expiresIn === null) {
+    $expiresIn = '1day';
+}
+$singleUse = !empty($input['single_use']);
+$maxUsesRaw = $input['max_uses'] ?? null;
+$maxUses = ($maxUsesRaw === null || $maxUsesRaw === '') ? null : (int) $maxUsesRaw;
+if ($singleUse) {
+    $maxUses = 1;
+} elseif ($maxUses !== null && $maxUses < 1) {
+    $maxUses = null;
+}
+$restrictDomainInput = trim($input['restrict_domain'] ?? '');
 $notes = trim($input['notes'] ?? '');
 
 // Validate board ID
@@ -72,41 +81,23 @@ if (!$access || !in_array($access['role'], ['owner', 'admin'], true)) {
     jsonResponse(['success' => false, 'message' => 'Only a Super Admin or Admin can share this board'], 403);
 }
 
-// Calculate expiration date
-$expiresAt = null;
-if ($expiresIn && $expiresIn !== 'never') {
-    switch ($expiresIn) {
-        case '1day':
-            $expiresAt = date('Y-m-d H:i:s', strtotime('+1 day'));
-            break;
-        case '7days':
-            $expiresAt = date('Y-m-d H:i:s', strtotime('+7 days'));
-            break;
-        case '30days':
-            $expiresAt = date('Y-m-d H:i:s', strtotime('+30 days'));
-            break;
-        default:
-            // Custom datetime
-            $timestamp = strtotime($expiresIn);
-            if ($timestamp && $timestamp > time()) {
-                $expiresAt = date('Y-m-d H:i:s', $timestamp);
-            }
-            break;
-    }
+$expiry = computeShareLinkExpiresAt($expiresIn);
+if (!$expiry['ok']) {
+    jsonResponse(['success' => false, 'message' => $expiry['message']], 400);
 }
+$expiresAt = $expiry['expires_at'];
 
 // Generate a cryptographically secure token (32 bytes = 256 bits)
 $token = bin2hex(random_bytes(32));
 $tokenHash = hash('sha256', $token);
 
-// Validate domain restriction format
-if ($restrictDomain && !preg_match('/^@?[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/', $restrictDomain)) {
-    jsonResponse(['success' => false, 'message' => 'Invalid domain format'], 400);
-}
-
-// Normalize domain (ensure it starts with @)
-if ($restrictDomain && $restrictDomain[0] !== '@') {
-    $restrictDomain = '@' . $restrictDomain;
+$restrictDomain = '';
+if ($restrictDomainInput !== '') {
+    $normalizedDomain = normalizeShareLinkDomain($restrictDomainInput);
+    if ($normalizedDomain === null) {
+        jsonResponse(['success' => false, 'message' => 'Invalid domain format. Example: company.com'], 400);
+    }
+    $restrictDomain = $normalizedDomain;
 }
 
 try {
@@ -118,6 +109,7 @@ try {
     ");
     
     $singleUseInt = $singleUse ? 1 : 0;
+    $maxUsesDb = $maxUses === null ? 0 : $maxUses;
     $stmt->bind_param(
         "iisssissis",
         $boardId,
@@ -125,7 +117,7 @@ try {
         $tokenHash,
         $roleOnJoin,
         $accessType,
-        $maxUses,
+        $maxUsesDb,
         $expiresAt,
         $restrictDomain,
         $singleUseInt,

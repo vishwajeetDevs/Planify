@@ -120,6 +120,16 @@ try {
         
         // Check if dates changed for email notification
         $datesChanged = ($startDate !== $card['start_date']) || ($dueDate !== $card['due_date']);
+        if ($datesChanged) {
+            logActivity(
+                $conn,
+                (int) $card['board_id'],
+                (int) $_SESSION['user_id'],
+                'dates_changed',
+                'updated dates on "' . ($card['title'] ?? 'a task') . '"',
+                (int) $cardId
+            );
+        }
         $shouldSendEmail = $datesChanged;
         $emailCardId = $cardId;
         $emailUserId = $_SESSION['user_id'];

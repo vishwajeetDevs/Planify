@@ -2305,3 +2305,63 @@ html {
     opacity: 0;
     pointer-events: none;
 }
+
+/* Share modal — invite by email */
+.share-invite-field {
+    transition: border-color 0.12s ease;
+}
+
+.share-invite-input,
+.share-invite-input:focus,
+.share-invite-input:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    transform: none !important;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.share-invite-input::-ms-clear,
+.share-invite-input::-webkit-search-cancel-button {
+    display: none;
+}
+
+/* Neutralise the global `[x-show] button:hover` rule (padding shift + tint)
+   for the buttons inside the invite-by-email section. */
+.share-invite-remove,
+.share-invite-remove:hover,
+.share-invite-remove:focus,
+.share-invite-remove:active {
+    padding: 0 !important;
+    transform: none !important;
+    box-shadow: none !important;
+    outline: none !important;
+    background-color: transparent !important;
+    transition: background-color 0.1s ease, color 0.1s ease;
+}
+
+.share-invite-remove:hover {
+    background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+.dark .share-invite-remove:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.share-invite-add,
+.share-invite-add:hover,
+.share-invite-add:focus {
+    padding-left: 0.75rem !important;
+    padding-right: 0.75rem !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.share-invite-clear,
+.share-invite-clear:hover,
+.share-invite-clear:focus {
+    padding: 0 !important;
+    transform: none !important;
+    background-color: transparent !important;
+}

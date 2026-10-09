@@ -24,19 +24,17 @@ if ($boardId <= 0) {
 }
 
 try {
-    // Check if user is the owner of the board
-    $stmt = $conn->prepare("
-        SELECT b.id, b.workspace_id, bm.role 
-        FROM boards b
-        JOIN board_members bm ON b.id = bm.board_id
-        WHERE b.id = ? AND bm.user_id = ? AND bm.role = 'owner'
-    ");
-    $stmt->bind_param("ii", $boardId, $userId);
+    $stmt = $conn->prepare("SELECT id, workspace_id FROM boards WHERE id = ?");
+    $stmt->bind_param("i", $boardId);
     $stmt->execute();
     $board = $stmt->get_result()->fetch_assoc();
 
     if (!$board) {
-        jsonResponse(['success' => false, 'message' => 'You do not have permission to delete this board'], 403);
+        jsonResponse(['success' => false, 'message' => 'Board not found'], 404);
+    }
+
+    if (!canManageBoard($conn, $userId, $boardId)) {
+        jsonResponse(['success' => false, 'message' => 'Only an Admin or Super Admin can delete this board'], 403);
     }
 
     // Start transaction

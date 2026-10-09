@@ -53,11 +53,10 @@ try {
         exit;
     }
     
-    // Check if user can edit the board (owner, admin, or member)
-    if (!canEditBoard($conn, $_SESSION['user_id'], $boardId)) {
+    if (!canManageBoard($conn, $_SESSION['user_id'], $boardId)) {
         header('Content-Type: application/json');
         http_response_code(403);
-        echo json_encode(['success' => false, 'message' => 'You do not have permission to update this list']);
+        echo json_encode(['success' => false, 'message' => 'Only Admins can rename lists']);
         exit;
     }
     

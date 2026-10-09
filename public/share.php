@@ -39,35 +39,19 @@ if (empty($token)) {
     if (!$shareLink) {
         $error = 'This link is not valid';
         $errorCode = 'INVALID_TOKEN';
-    } elseif ($shareLink['is_revoked']) {
-        $error = 'This link has been revoked by the owner';
-        $errorCode = 'REVOKED';
-        $boardInfo = [
-            'name' => $shareLink['board_name'],
-            'owner' => $shareLink['owner_name']
-        ];
-    } elseif ($shareLink['expires_at'] && strtotime($shareLink['expires_at']) < time()) {
-        $error = 'This link has expired';
-        $errorCode = 'EXPIRED';
-        $boardInfo = [
-            'name' => $shareLink['board_name'],
-            'owner' => $shareLink['owner_name']
-        ];
-    } elseif ($shareLink['max_uses'] && $shareLink['uses'] >= $shareLink['max_uses']) {
-        $error = 'This link has reached its maximum number of uses';
-        $errorCode = 'MAX_USES_REACHED';
-        $boardInfo = [
-            'name' => $shareLink['board_name'],
-            'owner' => $shareLink['owner_name']
-        ];
-    } elseif ($shareLink['single_use'] && $shareLink['uses'] > 0) {
-        $error = 'This link has already been used';
-        $errorCode = 'ALREADY_USED';
-        $boardInfo = [
-            'name' => $shareLink['board_name'],
-            'owner' => $shareLink['owner_name']
-        ];
     } else {
+        $linkState = validateShareLinkState($shareLink);
+        if (!$linkState['ok']) {
+            $error = $linkState['message'];
+            $errorCode = $linkState['error_code'];
+            $boardInfo = [
+                'name' => $shareLink['board_name'],
+                'owner' => $shareLink['owner_name'],
+            ];
+        }
+    }
+
+    if (!$error && $shareLink) {
         $boardInfo = [
             'id' => $shareLink['board_id'],
             'name' => $shareLink['board_name'],
@@ -97,15 +81,13 @@ if (empty($token)) {
                 $existingRole = $membership['role'];
             }
             
-            // Check domain restriction
             if ($shareLink['restrict_domain'] && !$alreadyMember) {
                 $stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
                 $stmt->bind_param("i", $userId);
                 $stmt->execute();
                 $user = $stmt->get_result()->fetch_assoc();
-                
-                $userDomain = '@' . substr(strrchr($user['email'], '@'), 1);
-                if (strtolower($userDomain) !== strtolower($shareLink['restrict_domain'])) {
+
+                if (!$user || !userEmailMatchesShareDomain($user['email'], $shareLink['restrict_domain'])) {
                     $error = 'This link is restricted to ' . e($shareLink['restrict_domain']) . ' email addresses';
                     $errorCode = 'DOMAIN_RESTRICTED';
                 }

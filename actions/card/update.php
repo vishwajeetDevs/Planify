@@ -57,6 +57,10 @@ try {
     if (!canEditBoard($conn, $userId, $boardId)) {
         jsonResponse(['success' => false, 'message' => 'You do not have permission to edit this card'], 403);
     }
+
+    if (($title !== null || $description !== null) && !canManageBoard($conn, $userId, $boardId)) {
+        jsonResponse(['success' => false, 'message' => 'Only Admins can edit task titles or descriptions'], 403);
+    }
     
     $updateFields = [];
     $updateParams = [];

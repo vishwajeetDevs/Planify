@@ -9,6 +9,8 @@ session_start();
 require_once '../../config/db.php';
 require_once '../../includes/functions.php';
 require_once '../../includes/NotificationHelper.php';
+require_once '../../src/MailHelper.php';
+require_once '../../helpers/IdEncrypt.php';
 
 // Set JSON header first, before any output
 header('Content-Type: application/json; charset=utf-8');
@@ -247,13 +249,27 @@ try {
         $notificationHelper = new NotificationHelper($conn);
         $commentPreview = strip_tags($content);
         $notificationHelper->notifyCommentOnAssignedTask($card_id, $_SESSION['user_id'], $commentPreview, $valid_mentioned_ids);
+
+        try {
+            MailHelper::sendTaskMentionNotifications(
+                $conn,
+                $card_id,
+                (int) $_SESSION['user_id'],
+                $commentPreview,
+                $valid_mentioned_ids
+            );
+            MailHelper::sendTaskCommentNotifications(
+                $conn,
+                $card_id,
+                (int) $_SESSION['user_id'],
+                $commentPreview,
+                $valid_mentioned_ids
+            );
+        } catch (Exception $mailEx) {
+            error_log('Comment email notification error: ' . $mailEx->getMessage());
+        }
         
-        // Log activity - use correct column names: board_id, action (not type)
-        $activity_desc = 'added a comment';
-        $activity_action = 'comment';
-        $activity_stmt = $conn->prepare("INSERT INTO activities (board_id, user_id, card_id, action, description) VALUES (?, ?, ?, ?, ?)");
-        $activity_stmt->bind_param('iiiss', $board_id, $_SESSION['user_id'], $card_id, $activity_action, $activity_desc);
-        $activity_stmt->execute();
+        logActivity($conn, $board_id, (int) $_SESSION['user_id'], 'comment', 'added a comment', $card_id);
         
         // Get the comment with user info for the response
         $comment_stmt = $conn->prepare("

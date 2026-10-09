@@ -63,6 +63,24 @@ try {
     $stmt->execute();
     $cardLabels = $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
+    $labelName = '';
+    $nameStmt = $conn->prepare('SELECT name FROM labels WHERE id = ?');
+    if ($nameStmt) {
+        $nameStmt->bind_param('i', $labelId);
+        $nameStmt->execute();
+        $labelRow = $nameStmt->get_result()->fetch_assoc();
+        $nameStmt->close();
+        $labelName = $labelRow['name'] ?? '';
+    }
+    logActivity(
+        $conn,
+        (int) $card['board_id'],
+        (int) $_SESSION['user_id'],
+        $action === 'added' ? 'label_added' : 'label_removed',
+        ($action === 'added' ? 'added' : 'removed') . ' label' . ($labelName !== '' ? ' "' . $labelName . '"' : ''),
+        (int) $cardId
+    );
+
     echo json_encode([
         'success' => true,
         'action' => $action,

@@ -79,12 +79,7 @@ try {
     $success = $stmt->execute();
     
     if ($success) {
-        // Log activity - use correct column names: board_id, action (not type)
-        $activity_desc = 'deleted a comment';
-        $activity_action = 'comment';
-        $activity_stmt = $conn->prepare("INSERT INTO activities (board_id, user_id, card_id, action, description) VALUES (?, ?, ?, ?, ?)");
-        $activity_stmt->bind_param('iiiss', $board_id, $_SESSION['user_id'], $card_id, $activity_action, $activity_desc);
-        $activity_stmt->execute();
+        logActivity($conn, (int) $board_id, (int) $_SESSION['user_id'], 'comment', 'deleted a comment', (int) $card_id);
         
         // Clean output buffer before sending JSON
         if (ob_get_level()) ob_clean();

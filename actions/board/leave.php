@@ -52,11 +52,17 @@ try {
         jsonResponse(['success' => false, 'message' => 'You are not a member of this board'], 404);
     }
     
-    // Check if user is the owner - owners cannot leave without transferring ownership
     if ($membership['role'] === 'owner') {
         jsonResponse([
             'success' => false, 
             'message' => 'As Super Admin, transfer that role before leaving this board.'
+        ], 403);
+    }
+
+    if ($membership['role'] === 'member') {
+        jsonResponse([
+            'success' => false,
+            'message' => 'Regular members cannot leave this board on their own. Ask an Admin to remove you.'
         ], 403);
     }
     

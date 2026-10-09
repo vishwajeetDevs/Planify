@@ -97,9 +97,8 @@ try {
         $card = $stmt->get_result()->fetch_assoc();
         $stmt->close();
         
-        // Must have edit permission to assign/unassign users
-        if (!$card || !canEditBoard($conn, $_SESSION['user_id'], $card['board_id'])) {
-            echo json_encode(['success' => false, 'message' => 'You do not have permission to modify assignments']);
+        if (!$card || !canManageBoard($conn, $_SESSION['user_id'], $card['board_id'])) {
+            echo json_encode(['success' => false, 'message' => 'Only Admins can assign or unassign members on tasks']);
             exit;
         }
         
@@ -158,10 +157,39 @@ try {
             $stmt->close();
         }
 
+        if ($resultAction === 'added' || $resultAction === 'removed') {
+            $subjectName = 'a member';
+            $taskTitle = 'a task';
+            $metaStmt = $conn->prepare('SELECT u.name AS user_name, c.title AS card_title FROM users u, cards c WHERE u.id = ? AND c.id = ?');
+            if ($metaStmt) {
+                $metaStmt->bind_param('ii', $userId, $cardId);
+                $metaStmt->execute();
+                $meta = $metaStmt->get_result()->fetch_assoc();
+                $metaStmt->close();
+                if (!empty($meta['user_name'])) {
+                    $subjectName = $meta['user_name'];
+                }
+                if (!empty($meta['card_title'])) {
+                    $taskTitle = $meta['card_title'];
+                }
+            }
+            $assignAction = $resultAction === 'added' ? 'card_assigned' : 'card_unassigned';
+            $assignVerb = $resultAction === 'added' ? 'assigned' : 'unassigned';
+            logActivity(
+                $conn,
+                (int) $card['board_id'],
+                (int) $_SESSION['user_id'],
+                $assignAction,
+                $assignVerb . ' ' . $subjectName . ' on "' . $taskTitle . '"',
+                $cardId
+            );
+        }
+
         $notifyUserId = $userId;
         $actorId = (int) $_SESSION['user_id'];
         $boardId = (int) $card['board_id'];
-        $shouldNotify = $resultAction === 'added' && $notifyUserId !== $actorId;
+        $shouldNotifyAssigned = $resultAction === 'added' && $notifyUserId !== $actorId;
+        $shouldNotifyUnassigned = $resultAction === 'removed' && $notifyUserId !== $actorId;
 
         planify_finish_json([
             'success' => true,
@@ -169,11 +197,8 @@ try {
             'assignees' => $assignees
         ]);
 
-        if ($shouldNotify) {
+        if ($shouldNotifyAssigned || $shouldNotifyUnassigned) {
             try {
-                $notificationHelper = new NotificationHelper($conn);
-                $notificationHelper->createAssignmentNotification($notifyUserId, $actorId, $cardId, $boardId);
-
                 $taskStmt = $conn->prepare("
                     SELECT c.title, c.due_date, c.list_id, l.title as list_name, b.name as board_name, b.id as board_id,
                            assignee.name as assignee_name, assignee.email as assignee_email,
@@ -190,13 +215,21 @@ try {
                 $taskDetails = $taskStmt->get_result()->fetch_assoc();
                 $taskStmt->close();
 
-                if ($taskDetails && !empty($taskDetails['assignee_email'])) {
+                if (!$taskDetails || empty($taskDetails['assignee_email'])) {
+                    exit;
+                }
+
+                $taskUrl = taskPageUrl(
+                    (int) $taskDetails['board_id'],
+                    $cardId,
+                    isset($taskDetails['list_id']) ? (int) $taskDetails['list_id'] : null
+                );
+
+                if ($shouldNotifyAssigned) {
+                    $notificationHelper = new NotificationHelper($conn);
+                    $notificationHelper->createAssignmentNotification($notifyUserId, $actorId, $cardId, $boardId);
+
                     $dueDate = !empty($taskDetails['due_date']) ? date('F j, Y', strtotime($taskDetails['due_date'])) : '';
-                    $taskUrl = taskPageUrl(
-                        (int) $taskDetails['board_id'],
-                        $cardId,
-                        isset($taskDetails['list_id']) ? (int) $taskDetails['list_id'] : null
-                    );
                     MailHelper::sendTaskAssignedEmail(
                         $taskDetails['assignee_email'],
                         $taskDetails['assignee_name'],
@@ -206,6 +239,17 @@ try {
                         $taskDetails['list_name'],
                         $taskUrl,
                         $dueDate
+                    );
+                }
+
+                if ($shouldNotifyUnassigned) {
+                    MailHelper::sendTaskUnassignedEmail(
+                        $taskDetails['assignee_email'],
+                        $taskDetails['assignee_name'],
+                        $taskDetails['title'],
+                        $taskDetails['actor_name'],
+                        $taskDetails['board_name'],
+                        $taskUrl
                     );
                 }
             } catch (Exception $e) {
